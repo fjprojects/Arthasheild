@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   ARTHASHIELD — STRICT MONOCHROME HIGH-CONTRAST DESIGN SYSTEM
+   Inspired by LabTwin Alexa+ 2026: Pure Black (#000000), Stark White (#FFFFFF),
+   and precision Zinc borders with monospace accents.
+   ========================================================================== */
+
+:root {
+  --bg-canvas: #000000;
+  --bg-surface: #09090b;
+  --bg-surface-elevated: #18181b;
+  --border-subtle: #27272a;
+  --border-strong: #3f3f46;
+  --text-primary: #ffffff;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100vh;
+    background-color: #000000;
+    color: #ffffff;
+    font-family: var(--font-sans);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background-color: #ffffff;
+    color: #000000;
+  }
+
+  /* Sleek Monochrome Scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #000000;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #27272a;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #52525b;
+  }
+}
