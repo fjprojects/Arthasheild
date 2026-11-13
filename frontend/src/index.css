@@ -1,0 +1,2268 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   ARTHASHIELD — ULTIMATE MONOCHROME CINEMATIC DESIGN SYSTEM
+   Strict palette:
+   - Pure black:     #000000
+   - Deep black:     #050505
+   - Near-black:     #0A0A0A
+   - Dark surfaces:  #111111
+   - Charcoal:       #202020
+   - Silver:         #AAAAAA
+   - White:          #FFFFFF
+   Zero color. Full monochrome typography, interactive venom ink reactions,
+   custom coin cursor, cryptographic text decryption, and terminal mechanics.
+   ========================================================================== */
+
+:root {
+  --bg-pure-black: #000000;
+  --bg-deep-black: #050505;
+  --bg-near-black: #0A0A0A;
+  --bg-dark-surface: #111111;
+  --border-charcoal: #202020;
+  --text-silver: #AAAAAA;
+  --text-white: #FFFFFF;
+
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100vh;
+    background-color: #000000;
+    color: #FFFFFF;
+    font-family: var(--font-sans);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background-color: #FFFFFF;
+    color: #000000;
+  }
+
+  /* Sleek Monochrome Technical Scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #000000;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #202020;
+    border-radius: 2px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #AAAAAA;
+  }
+}
+
+/* ==========================================================================
+   Venom Ink Effect — Button Reaction Keyframes
+   ========================================================================== */
+
+@keyframes venom-flash {
+  0% {
+    box-shadow: 0 0 0 1px #FFFFFF, 0 0 16px rgba(255, 255, 255, 0.7);
+    transform: scale(0.96);
+  }
+  35% {
+    box-shadow: 0 0 0 2px #FFFFFF, 0 0 22px rgba(255, 255, 255, 0.9);
+    transform: scale(0.98);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    transform: scale(1);
+  }
+}
+
+.venom-flash-active {
+  animation: venom-flash 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+/* ==========================================================================
+   CRT Screen Flicker & Power-On Expansion Sequence
+   ========================================================================== */
+
+@keyframes crt-power-on {
+  0% {
+    transform: scaleY(0.005) scaleX(0);
+    opacity: 0;
+    filter: brightness(3);
+  }
+  35% {
+    transform: scaleY(0.005) scaleX(1);
+    opacity: 1;
+    filter: brightness(2.5);
+  }
+  70% {
+    transform: scaleY(1) scaleX(1);
+    opacity: 1;
+    filter: brightness(1.2);
+  }
+  100% {
+    transform: scaleY(1) scaleX(1);
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+.animate-crt-boot {
+  animation: crt-power-on 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ==========================================================================
+   Navigation Rail Easing
+   A decelerating curve that settles without overshoot. It is declared as a
+   real class rather than a Tailwind arbitrary value, because Tailwind drops
+   an arbitrary cubic-bezier() whose commas are not escaped.
+   ========================================================================== */
+
+.ease-rail {
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ==========================================================================
+   PREMIUM MICRO-INTERACTION LAYER
+   One monochrome motion vocabulary shared by every interactive surface.
+
+   Timing scale (see the design system):
+     micro interactions .... 150-220ms
+     card effects .......... 200-280ms
+     sidebar transitions ... 250-300ms
+     persona orb ........... 300-450ms
+   ========================================================================== */
+
+/* --- Easing curves ------------------------------------------------------ */
+
+:root {
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* --- Buttons and controls: lift, press, focus --------------------------- */
+
+.interactive-control {
+  transition:
+    transform 160ms var(--ease-out-soft),
+    box-shadow 200ms var(--ease-out-soft),
+    border-color 200ms var(--ease-out-soft),
+    background-color 200ms var(--ease-out-soft),
+    color 160ms var(--ease-out-soft);
+}
+
+.interactive-control:hover:not(:disabled):not([aria-disabled='true']) {
+  transform: translateY(-1px);
+}
+
+.interactive-control:active:not(:disabled):not([aria-disabled='true']) {
+  transform: translateY(0) scale(0.985);
+  transition-duration: 90ms;
+}
+
+/* A single, consistent keyboard focus ring for the whole application. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.75);
+  outline-offset: 2px;
+}
+
+/* Registered custom properties: the spotlight glides to the pointer and fades
+   in smoothly instead of snapping. */
+@property --spot-x {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 50%;
+}
+
+@property --spot-y {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 50%;
+}
+
+@property --spot-strength {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+/* --- Cards: lift, silver border illumination, cursor spotlight ----------- */
+
+/*
+ * One shared card design for every primary dashboard panel.
+ *
+ * The design is expressed in CSS only: JavaScript merely publishes the pointer
+ * position (`--spot-x` / `--spot-y`) and the tilt angles (`--tilt-x` /
+ * `--tilt-y`) as custom properties, so a pointer move never re-renders React
+ * and every animated property stays on the compositor.
+ *
+ * Layers, from the outside in:
+ *   - a gradient border ring (::before) that fades in on hover/focus
+ *   - the cursor spotlight, painted as part of the background so it sits
+ *     above the panel colour and below the content - no stacking tricks
+ *   - a 3px lift, a silver border and a soft outer glow, gated to devices
+ *     that can actually hover so touch screens never get a stuck hover state
+ */
+.spotlight-card {
+  --spot-x: 50%;
+  --spot-y: 50%;
+  --spot-strength: 0;
+  position: relative;
+  /* Keeps the card's own positioned decorations inside its stacking context. */
+  isolation: isolate;
+  /* The surface tone is owned by the Card component so every dashboard panel
+     shares one resting colour. SpotlightCard used on its own falls back to the
+     canonical near-black panel. */
+  background-color: var(--card-bg, rgba(10, 10, 10, 0.92));
+  background-image: radial-gradient(
+    240px circle at var(--spot-x) var(--spot-y),
+    rgba(255, 255, 255, calc(0.11 * var(--spot-strength))),
+    rgba(255, 255, 255, calc(0.035 * var(--spot-strength))) 46%,
+    transparent 70%
+  );
+  background-repeat: no-repeat;
+  transition:
+    --spot-x 240ms var(--ease-out-soft),
+    --spot-y 240ms var(--ease-out-soft),
+    --spot-strength 240ms var(--ease-out-soft),
+    transform 240ms var(--ease-out-soft),
+    border-color 240ms var(--ease-out-soft),
+    box-shadow 240ms var(--ease-out-soft);
+}
+
+/* The cursor spotlight also appears for keyboard users, on focus-within.
+   Pointer hover is gated so a tapped card on a touch screen cannot keep a
+   stuck highlight after the finger lifts. */
+.spotlight-card:focus-within {
+  --spot-strength: 1;
+}
+
+@media (hover: hover) {
+  .spotlight-card:hover {
+    --spot-strength: 1;
+  }
+}
+
+/* Silver-to-charcoal gradient border ring. */
+.spotlight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.34),
+    rgba(255, 255, 255, 0.05) 38%,
+    rgba(255, 255, 255, 0.1) 72%,
+    rgba(255, 255, 255, 0.22)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 240ms var(--ease-out-soft);
+  pointer-events: none;
+}
+
+.spotlight-card:focus-within::before {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .spotlight-card:hover::before {
+    opacity: 1;
+  }
+}
+
+/* The lift only applies where a hover is meaningful (Freebuff's improvement:
+   on touch devices a tapped card would otherwise keep its hover state). */
+@media (hover: hover) and (pointer: fine) {
+  .spotlight-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(170, 170, 170, 0.55);
+    box-shadow:
+      0 10px 24px -12px rgba(0, 0, 0, 0.9),
+      0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 0 22px -6px rgba(255, 255, 255, 0.16);
+    will-change: transform;
+  }
+}
+
+/* Restrained 3D tilt, applied only on pointer devices (see usePointerSpotlight).
+   This rule comes after the lift so the tilt wins while both apply. */
+.tilt-card {
+  transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg))
+    translateY(0);
+  transition:
+    --spot-x 240ms var(--ease-out-soft),
+    --spot-y 240ms var(--ease-out-soft),
+    --spot-strength 240ms var(--ease-out-soft),
+    transform 240ms var(--ease-out-soft),
+    border-color 240ms var(--ease-out-soft),
+    box-shadow 240ms var(--ease-out-soft);
+}
+
+.tilt-card:hover {
+  transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg))
+    translateY(-3px);
+}
+
+/* --- Secondary dashboard boxes -------------------------------------------
+   Smaller panels, stat tiles and list rows share one resting treatment so
+   the dashboard reads as a single product. They deliberately carry no
+   pointer spotlight or tilt: they are dense and often inside scrolling lists. */
+.dashboard-panel {
+  border: 1px solid #202020;
+  background-color: rgba(10, 10, 10, 0.92);
+  transition:
+    border-color 200ms var(--ease-out-soft),
+    box-shadow 200ms var(--ease-out-soft);
+}
+
+.dashboard-panel:hover {
+  border-color: rgba(170, 170, 170, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 8px 20px -14px rgba(0, 0, 0, 0.9);
+}
+
+/* --- Progress indicators ------------------------------------------------- */
+
+/* The bar starts empty and grows once the data is available. The underlying
+   value is never altered - only the rendered width animates. */
+.grow-bar {
+  width: 0;
+  transition: width 900ms var(--ease-out-soft);
+}
+
+.grow-bar.is-ready {
+  width: var(--bar-target);
+}
+
+/* --- Page transitions ---------------------------------------------------- */
+
+@keyframes view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-enter {
+  animation: view-enter 220ms var(--ease-out-soft) both;
+}
+
+/* --- Sidebar: sliding active indicator ----------------------------------- */
+
+.nav-indicator {
+  transition:
+    transform 280ms var(--ease-out-soft),
+    height 280ms var(--ease-out-soft),
+    opacity 180ms linear;
+}
+
+/* --- Persona orbital selector -------------------------------------------
+   A self-contained metallic control: one silver rail, three identity orbs,
+   a travelling particle and a one-shot light sweep. All looping animation is
+   paused by `data-live="false"` when the module leaves the viewport or the tab
+   is hidden, and collapsed by the reduced-motion block at the end of the file.
+   ------------------------------------------------------------------------- */
+
+.persona-orbit {
+  --persona-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  isolation: isolate;
+  flex: 0 0 auto;
+  width: 272px;
+  padding: 5px 9px 6px;
+  border: 1px solid #242424;
+  background:
+    linear-gradient(180deg, rgba(13, 13, 13, 0.98), rgba(4, 4, 4, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02),
+    0 10px 30px -24px rgba(0, 0, 0, 1);
+  color: var(--text-silver);
+  user-select: none;
+  transition:
+    border-color 220ms var(--ease-out-soft),
+    box-shadow 220ms var(--ease-out-soft);
+}
+
+/* Pointer-following spotlight, finished with the shared --spot-x/--spot-y
+   custom properties written by usePointerSpotlight. */
+.persona-orbit::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    150px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    rgba(255, 255, 255, 0.075),
+    rgba(255, 255, 255, 0.025) 46%,
+    transparent 72%
+  );
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out-soft);
+}
+
+.persona-orbit:focus-within::before {
+  opacity: 0.75;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .persona-orbit:hover::before {
+    opacity: 1;
+  }
+
+  .persona-orbit:hover {
+    border-color: #343434;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 0 0 1px rgba(255, 255, 255, 0.025),
+      0 14px 34px -24px rgba(0, 0, 0, 1);
+  }
+}
+
+/* Four hairline corner brackets keep the module in the existing technical
+   frame language without adding a rounded or soft card shape. */
+.persona-orbit__corner {
+  position: absolute;
+  z-index: 2;
+  width: 4px;
+  height: 4px;
+  border-color: rgba(255, 255, 255, 0.38);
+  border-style: solid;
+  pointer-events: none;
+}
+
+.persona-orbit__corner--tl {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+}
+
+.persona-orbit__corner--tr {
+  top: -1px;
+  right: -1px;
+  border-width: 1px 1px 0 0;
+}
+
+.persona-orbit__corner--bl {
+  bottom: -1px;
+  left: -1px;
+  border-width: 0 0 1px 1px;
+}
+
+.persona-orbit__corner--br {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1px 1px 0;
+}
+
+.persona-orbit__meta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 1px;
+  color: #6f6f6f;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.persona-orbit__meta-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.persona-orbit__meta-dot {
+  width: 3px;
+  height: 3px;
+  flex: 0 0 3px;
+  background: #d8d8d8;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.55);
+}
+
+.persona-orbit__meta-index {
+  flex: 0 0 auto;
+  color: #8a8a8a;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.persona-orbit__field {
+  position: relative;
+  z-index: 1;
+  height: 35px;
+  margin-top: 3px;
+}
+
+/* The rail spans only the centres of the first and last orb. The inset values
+   are supplied inline from the persona count, so the geometry stays exact. */
+.persona-orbit__rail {
+  position: absolute;
+  top: 11px;
+  z-index: 0;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.persona-orbit__rail-base {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.36) 16%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.36) 84%,
+    rgba(255, 255, 255, 0.06)
+  );
+  box-shadow: 0 0 7px rgba(255, 255, 255, 0.09);
+}
+
+/* One-shot light sweep on persona change. The element is remounted with a new
+   key, so the animation restarts even when the user moves back and forth. */
+.persona-orbit__sweep {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  width: 34%;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.92),
+    transparent
+  );
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.75));
+  opacity: 0;
+  animation: persona-track-sweep 680ms var(--ease-in-out-soft) both;
+}
+
+.persona-orbit__sweep.is-reverse {
+  animation-direction: reverse;
+}
+
+@keyframes persona-track-sweep {
+  0% {
+    transform: translateX(-115%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(320%);
+    opacity: 0;
+  }
+}
+
+.persona-orbit__particle {
+  position: absolute;
+  top: 11px;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    #ffffff 0 25%,
+    #d9d9d9 50%,
+    #777777 78%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 5px 1px rgba(255, 255, 255, 0.62),
+    0 0 16px 3px rgba(255, 255, 255, 0.2);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition:
+    left 420ms var(--persona-ease),
+    opacity 180ms var(--ease-out-soft);
+}
+
+.persona-orbit__particle::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.26), transparent 70%);
+  filter: blur(1px);
+}
+
+.persona-orbit__particle[data-ready='true'] {
+  opacity: 1;
+}
+
+.persona-orbit__nodes {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  height: 100%;
+  align-items: start;
+}
+
+.persona-node {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: 1px 2px 4px;
+  border: 0;
+  background: transparent;
+  color: #8b8b8b;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 220ms var(--ease-out-soft);
+}
+
+.persona-node:focus-visible {
+  outline: none;
+}
+
+.persona-node:focus-visible .persona-orb {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.92),
+    0 0 0 4px rgba(255, 255, 255, 0.12);
+}
+
+.persona-node__label {
+  position: relative;
+  display: block;
+  color: #8b8b8b;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition:
+    color 220ms var(--ease-out-soft),
+    text-shadow 260ms var(--ease-out-soft);
+}
+
+.persona-node__label::after {
+  content: '';
+  position: absolute;
+  right: 50%;
+  bottom: -3px;
+  left: 50%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.9),
+    transparent
+  );
+  opacity: 0;
+  transition:
+    right 340ms var(--persona-ease),
+    left 340ms var(--persona-ease),
+    opacity 220ms var(--ease-out-soft);
+}
+
+.persona-node[aria-checked='true'] .persona-node__label {
+  color: #ffffff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.42);
+}
+
+.persona-node[aria-checked='true'] .persona-node__label::after {
+  right: 0;
+  left: 0;
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .persona-node:hover .persona-node__label {
+    color: #ffffff;
+  }
+
+  .persona-node:hover .persona-node__label::after {
+    right: 16%;
+    left: 16%;
+    opacity: 0.6;
+  }
+}
+
+/* --- Orb layers ---------------------------------------------------------- */
+
+.persona-orb {
+  position: relative;
+  display: block;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  transition: transform 220ms var(--ease-out-soft);
+}
+
+.persona-orb__halo {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.26) 0%,
+    rgba(255, 255, 255, 0.07) 42%,
+    transparent 70%
+  );
+  opacity: 0;
+  transform: scale(0.82);
+  transition:
+    opacity 240ms var(--ease-out-soft),
+    transform 240ms var(--ease-out-soft);
+}
+
+/* A masked conic gradient gives a thin, continuously rotating metallic ring
+   without drawing a second circular border. */
+.persona-orb__ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  padding: 1px;
+  background: conic-gradient(
+    from 0deg,
+    rgba(255, 255, 255, 0) 0deg,
+    rgba(255, 255, 255, 0.07) 34deg,
+    rgba(255, 255, 255, 0.68) 70deg,
+    rgba(255, 255, 255, 0.1) 116deg,
+    rgba(255, 255, 255, 0) 184deg,
+    rgba(255, 255, 255, 0.3) 286deg,
+    rgba(255, 255, 255, 0) 360deg
+  );
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 1.5px),
+    #000 calc(100% - 1.2px)
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 1.5px),
+    #000 calc(100% - 1.2px)
+  );
+  opacity: 0.42;
+  animation: persona-ring-orbit 11s linear infinite;
+  transition:
+    opacity 240ms var(--ease-out-soft),
+    filter 240ms var(--ease-out-soft);
+}
+
+@keyframes persona-ring-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.persona-orb__shell {
+  position: absolute;
+  inset: 1.5px;
+  overflow: hidden;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle at 33% 26%,
+      rgba(255, 255, 255, 0.96) 0 5%,
+      rgba(255, 255, 255, 0.55) 12%,
+      transparent 31%
+    ),
+    radial-gradient(
+      circle at 64% 76%,
+      rgba(255, 255, 255, 0.22),
+      transparent 43%
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      #929292 0%,
+      #4c4c4c 42%,
+      #1a1a1a 74%,
+      #050505 100%
+    );
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.9),
+    0 1px 2px rgba(0, 0, 0, 1);
+}
+
+.persona-orb__reflection {
+  position: absolute;
+  inset: -45%;
+  background: conic-gradient(
+    from 210deg,
+    transparent 0deg,
+    transparent 34deg,
+    rgba(255, 255, 255, 0.34) 48deg,
+    rgba(255, 255, 255, 0.04) 62deg,
+    transparent 80deg,
+    transparent 360deg
+  );
+  animation: persona-reflection-spin 9s linear infinite;
+}
+
+@keyframes persona-reflection-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.persona-orb__scan {
+  position: absolute;
+  inset: 0;
+  height: 38%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(255, 255, 255, 0.72),
+    transparent
+  );
+  mix-blend-mode: screen;
+  opacity: 0;
+  transform: translateY(-140%);
+}
+
+@keyframes persona-orb-scan {
+  from {
+    transform: translateY(-140%);
+  }
+  to {
+    transform: translateY(300%);
+  }
+}
+
+.persona-orb__core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.38);
+  box-shadow: 0 0 3px rgba(255, 255, 255, 0.18);
+  transform: translate(-50%, -50%);
+  transition:
+    background-color 240ms var(--ease-out-soft),
+    box-shadow 240ms var(--ease-out-soft);
+}
+
+/* --- Selected, hover and pulse states ------------------------------------ */
+
+.persona-node[aria-checked='true'] .persona-orb__halo {
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+.persona-node[aria-checked='true'] .persona-orb__ring {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.62));
+}
+
+.persona-node[aria-checked='true'] .persona-orb__core {
+  background: #ffffff;
+  box-shadow:
+    0 0 5px #ffffff,
+    0 0 10px rgba(255, 255, 255, 0.68);
+}
+
+.persona-orbit[data-live='true'] .persona-node[aria-checked='true'] .persona-orb {
+  animation: persona-orb-breathe 3.4s ease-in-out infinite;
+}
+
+@keyframes persona-orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.055);
+  }
+}
+
+.persona-node[data-pulse='true'] .persona-orb__halo {
+  animation: persona-halo-pulse 560ms var(--ease-out-soft);
+}
+
+@keyframes persona-halo-pulse {
+  0% {
+    opacity: 0.18;
+    transform: scale(0.9);
+  }
+  38% {
+    opacity: 1;
+    transform: scale(1.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.persona-node[data-pulse='true'] .persona-node__label {
+  animation: persona-label-flash 620ms var(--ease-out-soft);
+}
+
+@keyframes persona-label-flash {
+  0% {
+    text-shadow:
+      0 0 20px #ffffff,
+      0 0 36px rgba(255, 255, 255, 0.8);
+  }
+  100% {
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.42);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .persona-node:hover .persona-orb__halo {
+    opacity: 0.78;
+    transform: scale(1.18);
+  }
+
+  .persona-node:hover .persona-orb__ring {
+    opacity: 0.92;
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.55));
+    animation-duration: 2.8s;
+  }
+
+  .persona-node:hover .persona-orb__reflection {
+    animation-duration: 3.6s;
+  }
+
+  .persona-node:hover .persona-orb__scan {
+    opacity: 0.68;
+    animation: persona-orb-scan 1.35s linear infinite;
+  }
+}
+
+/* Animation loops stop when the module is off-screen or the tab is hidden. */
+.persona-orbit[data-live='false'] .persona-orb__ring,
+.persona-orbit[data-live='false'] .persona-orb__reflection,
+.persona-orbit[data-live='false'] .persona-node[aria-checked='true'] .persona-orb {
+  animation-play-state: paused;
+}
+
+/* Responsive widths preserve the three equal columns while leaving room for
+   consent, credential status and the shred action in the same navbar row. */
+@media (max-width: 1279px) {
+  .persona-orbit {
+    width: 248px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .persona-orbit {
+    width: 216px;
+  }
+}
+
+@media (max-width: 767px) {
+  .persona-orbit {
+    width: 188px;
+  }
+}
+
+@media (max-width: 639px) {
+  .persona-orbit {
+    width: 154px;
+    padding: 4px 6px 5px;
+  }
+
+  .persona-orbit__meta {
+    display: none;
+  }
+
+  .persona-orbit__field {
+    height: 35px;
+    margin-top: 0;
+  }
+
+  .persona-node__label {
+    font-size: 8px;
+    letter-spacing: 0.12em;
+  }
+
+  .persona-node {
+    gap: 3px;
+    padding: 1px 1px 4px;
+  }
+}
+
+@media (max-width: 419px) {
+  .persona-orbit {
+    width: 146px;
+  }
+}
+
+@media (max-width: 359px) {
+  .persona-orbit {
+    width: 128px;
+    padding: 4px;
+  }
+
+  .persona-node__label {
+    font-size: 7px;
+  }
+}
+
+/* --- Security command strip ----------------------------------------------
+   Consent, credential assurance and the destructive session purge action.
+   Each module owns its real state; only the confirmed consent prop changes
+   the first module, and the shred dialog is the sole entry point to deletion.
+   ------------------------------------------------------------------------- */
+
+.security-command {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.security-module {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  height: 50px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 5px 9px 6px;
+  border: 1px solid #2a2a2a;
+  background:
+    linear-gradient(180deg, rgba(13, 13, 13, 0.99), rgba(4, 4, 4, 0.99));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 8px 20px -20px rgba(0, 0, 0, 1);
+  color: var(--text-silver);
+  font-family: var(--font-mono);
+  text-align: left;
+  transition:
+    border-color 220ms var(--ease-out-soft),
+    box-shadow 220ms var(--ease-out-soft),
+    background-color 220ms var(--ease-out-soft),
+    transform 160ms var(--ease-out-soft);
+}
+
+.security-module--consent {
+  width: 190px;
+}
+
+.security-module--consent::before,
+.security-module--credential::before,
+.security-module--shred::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: -1px;
+  z-index: 2;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.2);
+  transition:
+    background-color 220ms var(--ease-out-soft),
+    box-shadow 220ms var(--ease-out-soft);
+}
+
+.security-module--credential {
+  width: 158px;
+  cursor: help;
+}
+
+.security-module--credential::before {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.security-module--consent[data-state='active']::before {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+}
+
+.security-module--consent[data-state='withdrawn']::before {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: none;
+}
+
+.security-module__sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.security-module__sheen::after {
+  content: '';
+  position: absolute;
+  top: -35%;
+  bottom: -35%;
+  left: -45%;
+  width: 28%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.13),
+    transparent
+  );
+  opacity: 0;
+  transform: translateX(-180%) skewX(-14deg);
+}
+
+@keyframes security-module-sheen {
+  0% {
+    opacity: 0;
+    transform: translateX(-180%) skewX(-14deg);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(520%) skewX(-14deg);
+  }
+}
+
+.security-module__head {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #6f6f6f;
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.security-module__head-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.security-module__head-icon {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  color: #cccccc;
+  transition:
+    color 220ms var(--ease-out-soft),
+    filter 220ms var(--ease-out-soft);
+}
+
+.security-module__code {
+  flex: 0 0 auto;
+  color: #606060;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Consent state ------------------------------------------------------- */
+
+.security-consent__body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  animation: security-state-enter 320ms var(--ease-out-soft) both;
+}
+
+@keyframes security-state-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.security-consent__dot {
+  position: relative;
+  display: block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  background: #ffffff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.85);
+  transition:
+    background-color 240ms var(--ease-out-soft),
+    box-shadow 240ms var(--ease-out-soft);
+}
+
+.security-consent__dot::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  animation: security-consent-breathe 3.4s ease-in-out infinite;
+}
+
+@keyframes security-consent-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.86);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.42);
+  }
+}
+
+.security-module--consent[data-state='withdrawn'] .security-consent__dot {
+  background: #5a5a5a;
+  box-shadow: none;
+}
+
+.security-module--consent[data-state='withdrawn'] .security-consent__dot::before {
+  border-color: rgba(255, 255, 255, 0.15);
+  animation: none;
+}
+
+.security-consent__word {
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.security-module--consent[data-state='withdrawn'] .security-consent__word {
+  color: #a2a2a2;
+}
+
+.security-module--consent[data-busy='true'] .security-consent__word {
+  color: #d2d2d2;
+}
+
+.security-action {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 24px;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 0 0 0 8px;
+  border: 0;
+  border-left: 1px solid #2c2c2c;
+  background: transparent;
+  color: #8b8b8b;
+  font: inherit;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 200ms var(--ease-out-soft),
+    border-color 200ms var(--ease-out-soft);
+}
+
+.security-action:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #ffffff;
+}
+
+.security-action:disabled {
+  opacity: 0.62;
+  cursor: wait;
+}
+
+.security-action__icon {
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.security-action__icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.security-action__spinner {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  animation: security-spin 800ms linear infinite;
+}
+
+@keyframes security-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- Zero credentials ---------------------------------------------------- */
+
+.security-credential__body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.security-credential__shield {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  color: #ffffff;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.35));
+}
+
+.security-credential__label {
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.security-credential__info {
+  width: 10px;
+  height: 10px;
+  margin-left: auto;
+  flex: 0 0 10px;
+  color: #767676;
+  transition: color 200ms var(--ease-out-soft);
+}
+
+.security-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -1px;
+  z-index: 70;
+  width: 266px;
+  padding: 10px 12px;
+  border: 1px solid #3b3b3b;
+  background: #050505;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.035),
+    0 18px 45px -18px rgba(0, 0, 0, 1);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition:
+    opacity 180ms var(--ease-out-soft),
+    transform 180ms var(--ease-out-soft),
+    visibility 180ms var(--ease-out-soft);
+  pointer-events: none;
+}
+
+.security-tooltip__title {
+  display: block;
+  margin-bottom: 5px;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.security-tooltip__body {
+  display: block;
+  color: #aaaaaa;
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 1.65;
+  letter-spacing: 0.015em;
+  text-transform: none;
+}
+
+.security-module--credential:hover .security-tooltip,
+.security-module--credential:focus-visible .security-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* --- Shred data ---------------------------------------------------------- */
+
+.security-module--shred {
+  width: 122px;
+  border-color: #3c3c3c;
+  cursor: pointer;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.018) 0 1px,
+      transparent 1px 8px
+    ),
+    linear-gradient(180deg, rgba(15, 15, 15, 0.99), rgba(3, 3, 3, 0.99));
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.security-module--shred::before {
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+}
+
+.security-shred__body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.security-shred__icon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  color: #ffffff;
+  transition:
+    transform 220ms var(--ease-out-soft),
+    filter 220ms var(--ease-out-soft);
+}
+
+.security-shred__icon--spin {
+  animation: security-spin 900ms linear infinite;
+}
+
+.security-shred__label {
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.security-module--shred:hover:not(:disabled) {
+  border-color: #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 26px -12px rgba(255, 255, 255, 0.5);
+}
+
+.security-module--shred:hover:not(:disabled) .security-shred__icon {
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.9));
+  transform: translateY(-1px) rotate(-7deg);
+}
+
+.security-module--shred:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.security-module--shred:disabled {
+  opacity: 0.62;
+  cursor: wait;
+}
+
+.security-module--shred[data-busy='true'] {
+  border-color: #555555;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .security-module:hover {
+    border-color: #3d3d3d;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 0 0 1px rgba(255, 255, 255, 0.025),
+      0 0 22px -15px rgba(255, 255, 255, 0.32);
+  }
+
+  .security-module:hover .security-module__sheen::after,
+  .security-module:focus-within .security-module__sheen::after {
+    animation: security-module-sheen 820ms var(--ease-out-soft);
+  }
+
+  .security-module:hover .security-module__head-icon,
+  .security-module:focus-within .security-module__head-icon {
+    color: #ffffff;
+    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.45));
+  }
+
+  .security-module--credential:hover .security-credential__info,
+  .security-module--credential:focus-visible .security-credential__info {
+    color: #ffffff;
+  }
+}
+
+/* --- Shred confirmation dialog ------------------------------------------ */
+
+.shred-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.86);
+  backdrop-filter: blur(9px);
+  animation: shred-backdrop-in 180ms ease-out both;
+}
+
+@keyframes shred-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.shred-dialog {
+  position: relative;
+  isolation: isolate;
+  width: min(570px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid #4a4a4a;
+  background: #050505;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 30px 90px -30px rgba(0, 0, 0, 1),
+    0 0 70px rgba(255, 255, 255, 0.08);
+  font-family: var(--font-mono);
+  animation: shred-dialog-in 260ms var(--ease-out-soft) both;
+}
+
+@keyframes shred-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.shred-dialog__scan {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.85),
+    transparent
+  );
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  animation: shred-dialog-scan 1.3s var(--ease-out-soft) both;
+}
+
+@keyframes shred-dialog-scan {
+  from {
+    opacity: 0;
+    transform: scaleX(0.1);
+  }
+  35% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
+.shred-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.shred-dialog__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #a5a5a5;
+  font-size: 8px;
+  line-height: 1.3;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.shred-dialog__close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 1px solid #292929;
+  background: transparent;
+  color: #8a8a8a;
+  cursor: pointer;
+  transition:
+    border-color 200ms var(--ease-out-soft),
+    color 200ms var(--ease-out-soft),
+    background-color 200ms var(--ease-out-soft);
+}
+
+.shred-dialog__close:hover {
+  border-color: #ffffff;
+  background: #111111;
+  color: #ffffff;
+}
+
+.shred-dialog__title {
+  margin: 16px 0 8px;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shred-dialog__copy {
+  margin: 0;
+  color: #aaaaaa;
+  font-size: 10px;
+  line-height: 1.7;
+  letter-spacing: 0.015em;
+}
+
+.shred-dialog__scope {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin: 16px 0;
+  border: 1px solid #282828;
+  background: #282828;
+}
+
+.shred-dialog__scope-block {
+  padding: 12px;
+  background: #090909;
+}
+
+.shred-dialog__scope-block h3 {
+  margin: 0 0 8px;
+  color: #ffffff;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.shred-dialog__scope-block--retained h3 {
+  color: #777777;
+}
+
+.shred-dialog__scope-block ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shred-dialog__scope-block li {
+  position: relative;
+  padding-left: 10px;
+  color: #a8a8a8;
+  font-size: 9px;
+  line-height: 1.8;
+}
+
+.shred-dialog__scope-block li::before {
+  content: '';
+  position: absolute;
+  top: 0.7em;
+  left: 0;
+  width: 3px;
+  height: 1px;
+  background: #7c7c7c;
+}
+
+.shred-dialog__scope-block--retained li {
+  color: #777777;
+}
+
+.shred-dialog__warning {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 1px solid #ffffff;
+  background: rgba(255, 255, 255, 0.035);
+  color: #e5e5e5;
+  font-size: 9px;
+  line-height: 1.6;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.shred-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.shred-dialog__button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background-color 200ms var(--ease-out-soft),
+    border-color 200ms var(--ease-out-soft),
+    color 200ms var(--ease-out-soft),
+    transform 180ms var(--ease-out-soft),
+    box-shadow 220ms var(--ease-out-soft);
+}
+
+.shred-dialog__button--cancel {
+  border: 1px solid #333333;
+  background: transparent;
+  color: #aaaaaa;
+}
+
+.shred-dialog__button--cancel:hover {
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+.shred-dialog__button--confirm {
+  border: 1px solid #ffffff;
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.16);
+}
+
+.shred-dialog__button--confirm:hover {
+  background: #000000;
+  color: #ffffff;
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.26);
+}
+
+.shred-dialog__button:active {
+  transform: scale(0.985);
+}
+
+/* --- Security strip responsive geometry ---------------------------------- */
+
+@media (max-width: 1279px) {
+  .security-module--consent {
+    width: 180px;
+  }
+
+  .security-module--credential {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .security-module--consent {
+    width: 174px;
+  }
+
+  .security-module--shred {
+    width: 118px;
+  }
+}
+
+@media (max-width: 767px) {
+  .security-module--consent {
+    width: 166px;
+  }
+
+  .security-module--shred {
+    width: 114px;
+  }
+}
+
+@media (max-width: 639px) {
+  .security-command {
+    gap: 4px;
+  }
+
+  .security-module {
+    height: 46px;
+    padding: 4px 7px 5px;
+  }
+
+  .security-module--consent {
+    width: 116px;
+  }
+
+  .security-module--shred {
+    width: 38px;
+    align-items: center;
+    padding: 4px;
+  }
+
+  .security-module__head {
+    font-size: 7px;
+    letter-spacing: 0.1em;
+  }
+
+  .security-action {
+    min-height: 22px;
+    padding-left: 5px;
+  }
+
+  .security-action__text {
+    display: none;
+  }
+
+  .security-action__icon {
+    display: inline-flex;
+  }
+
+  .security-consent__body {
+    gap: 5px;
+  }
+
+  .security-consent__word {
+    font-size: 8px;
+    letter-spacing: 0.08em;
+  }
+
+  .security-module--shred .security-shred__label {
+    display: none;
+  }
+
+  .security-module--shred::before {
+    top: 8px;
+    bottom: 8px;
+  }
+}
+
+@media (max-width: 419px) {
+  .security-module--consent {
+    width: 108px;
+  }
+
+  .security-module--shred {
+    width: 34px;
+  }
+
+  .security-command {
+    gap: 3px;
+  }
+}
+
+@media (max-width: 359px) {
+  .security-module--consent {
+    width: 96px;
+  }
+
+  .security-module--shred {
+    width: 30px;
+  }
+
+  .security-module__code {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .shred-dialog {
+    padding: 18px;
+  }
+
+  .shred-dialog__title {
+    font-size: 15px;
+  }
+
+  .shred-dialog__scope {
+    grid-template-columns: 1fr;
+  }
+
+  .shred-dialog__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Transaction rows ---------------------------------------------------- */
+
+.ledger-row {
+  transition:
+    background-color 180ms var(--ease-out-soft),
+    box-shadow 180ms var(--ease-out-soft);
+}
+
+.ledger-row:hover {
+  box-shadow: inset 2px 0 0 rgba(255, 255, 255, 0.55);
+}
+
+.ledger-row:focus-visible {
+  box-shadow: inset 2px 0 0 rgba(255, 255, 255, 0.85);
+  outline: none;
+}
+
+.ledger-row[data-selected='true'] {
+  box-shadow: inset 2px 0 0 rgba(255, 255, 255, 0.9);
+}
+
+.ledger-flags {
+  transition:
+    opacity 200ms var(--ease-out-soft),
+    transform 200ms var(--ease-out-soft);
+}
+
+/* ==========================================================================
+   Reduced motion: the whole micro-interaction layer becomes instant.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-card,
+  .spotlight-card:hover,
+  .spotlight-card:focus-within,
+  .spotlight-card::before,
+  .tilt-card,
+  .tilt-card:hover,
+  .dashboard-panel,
+  .interactive-control,
+  .interactive-control:hover,
+  .interactive-control:active,
+  .grow-bar,
+  .nav-indicator,
+  .persona-orbit,
+  .persona-orbit *,
+  .persona-orbit *::before,
+  .persona-orbit *::after,
+  .security-module,
+  .security-module *,
+  .security-module *::before,
+  .security-module *::after,
+  .shred-dialog-backdrop,
+  .shred-dialog,
+  .shred-dialog *,
+  .shred-dialog *::before,
+  .shred-dialog *::after,
+  .ledger-row,
+  .ledger-flags {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .spotlight-card:hover,
+  .spotlight-card:focus-within,
+  .tilt-card:hover,
+  .interactive-control:hover,
+  .interactive-control:active {
+    transform: none !important;
+  }
+
+  /* The spotlight is pointer-driven motion, so it is switched off entirely.
+     The hover/focus selectors are explicit because the pointer highlight is
+     declared on them and a custom property must be reset on the same element
+     state that turns it on. */
+  .spotlight-card,
+  .spotlight-card:hover,
+  .spotlight-card:focus-within {
+    --spot-strength: 0 !important;
+  }
+
+  .dashboard-panel:hover {
+    box-shadow: none !important;
+  }
+
+  .view-enter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Mobile navigation drawer sliding in from the left edge */
+@keyframes sidebar-drawer-in {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-sidebar-drawer-in {
+  animation: sidebar-drawer-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Reduced motion: the navigation rail and the mobile drawer switch state
+   instantly instead of animating. Scoped to the sidebar only. */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-rail,
+  .sidebar-rail * {
+    transition-duration: 0.01ms !important;
+  }
+
+  .animate-sidebar-drawer-in {
+    animation: none !important;
+  }
+}
+
+/* Scanline Sweep Across Card */
+@keyframes scanline-sweep {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(300%);
+    opacity: 0;
+  }
+}
+
+.animate-scanline {
+  position: relative;
+  overflow: hidden;
+}
+.animate-scanline::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #FFFFFF, transparent);
+  box-shadow: 0 0 8px #FFFFFF;
+  animation: scanline-sweep 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Target Lock Hover Animation Keyframes
+   ========================================================================== */
+
+.target-lock-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.target-crosshair {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #FFFFFF;
+}
+
+.target-tl { top: -6px; left: -6px; border-top: 1.5px solid #FFFFFF; border-left: 1.5px solid #FFFFFF; }
+.target-tr { top: -6px; right: -6px; border-top: 1.5px solid #FFFFFF; border-right: 1.5px solid #FFFFFF; }
+.target-bl { bottom: -6px; left: -6px; border-bottom: 1.5px solid #FFFFFF; border-left: 1.5px solid #FFFFFF; }
+.target-br { bottom: -6px; right: -6px; border-bottom: 1.5px solid #FFFFFF; border-right: 1.5px solid #FFFFFF; }
+
+.target-lock-wrap:hover .target-tl {
+  top: 0px;
+  left: 0px;
+  opacity: 1;
+}
+.target-lock-wrap:hover .target-tr {
+  top: 0px;
+  right: 0px;
+  opacity: 1;
+}
+.target-lock-wrap:hover .target-bl {
+  bottom: 0px;
+  left: 0px;
+  opacity: 1;
+}
+.target-lock-wrap:hover .target-br {
+  bottom: 0px;
+  right: 0px;
+  opacity: 1;
+}
+
+/* ==========================================================================
+   Warning & Threat Breathing Pulse (Strict Monochrome)
+   ========================================================================== */
+
+@keyframes monochrome-warning-pulse {
+  0%, 100% {
+    border-color: #333333;
+    box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  }
+  50% {
+    border-color: #FFFFFF;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.2), inset 0 0 10px rgba(255, 255, 255, 0.05);
+  }
+}
+
+.animate-warning-pulse {
+  animation: monochrome-warning-pulse 2.2s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   Typewriter Blinking Block Cursor
+   ========================================================================== */
+
+@keyframes blink-cursor {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+.blinking-cursor {
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  background-color: #FFFFFF;
+  margin-left: 2px;
+  vertical-align: -0.1em;
+  animation: blink-cursor 0.85s steps(1) infinite;
+}
+
+/* ==========================================================================
+   SVG Corner Path Tracing
+   ========================================================================== */
+
+@keyframes drawBracket {
+  from {
+    stroke-dashoffset: 40;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-draw-bracket {
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: drawBracket 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ==========================================================================
+   Staggered System Boot-Up Sequences
+   ========================================================================== */
+
+@keyframes boot-stagger {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 1;
+    /* The transform is deliberately not pinned here: a filled animation would
+       override the hover lift of the card it sits on. The slide still runs,
+       because the property interpolates back to the element's own value. */
+    filter: blur(0);
+  }
+}
+
+.boot-stage-1 { animation: boot-stagger 0.35s 0.05s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+.boot-stage-2 { animation: boot-stagger 0.35s 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+.boot-stage-3 { animation: boot-stagger 0.35s 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+.boot-stage-4 { animation: boot-stagger 0.35s 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+
+/* Moving Dashed Border for Upload Dropzones */
+@keyframes dash-move {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+
+.animate-dash-move {
+  animation: dash-move 1.5s linear infinite;
+}
+
+/* Subtle Shimmer for High-Priority Monochrome Cards */
+@keyframes silver-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-silver {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: silver-shimmer 3.5s infinite;
+}

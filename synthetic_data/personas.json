@@ -1,0 +1,155 @@
+{
+  "personas": [
+    {
+      "id": "persona_freelancer_rohit",
+      "name": "Rohit Verma",
+      "masked_name": "[USER_PRIMARY]",
+      "profile": "Freelance UI/UX Designer & Developer",
+      "currency": "INR",
+      "currency_symbol": "₹",
+      "monthly_average_income": 82000,
+      "income_stability": "variable",
+      "account_summary": {
+        "bank_name": "Apex National Bank",
+        "masked_account_number": "XX..4821",
+        "ifsc_code": "APEX0001234",
+        "current_balance": 54200,
+        "calculated_runway_months": 1.2
+      },
+      "detected_leaks_summary": {
+        "total_monthly_leakage": 9430,
+        "items_count": 5,
+        "dormant_subscriptions": [
+          { "service": "Adobe Creative Cloud", "monthly_cost": 4200, "status": "dormant_45_days", "recommendation": "Pause or downgrade to single-app plan." },
+          { "service": "AWS Cloud Instance (Unused EC2)", "monthly_cost": 1500, "status": "dormant_60_days", "recommendation": "Terminate idle t3.medium instance." },
+          { "service": "Figma Pro (Solo Seat)", "monthly_cost": 1250, "status": "active_duplicate", "recommendation": "Consolidate with client-provided team seat." },
+          { "service": "ChatGPT Plus", "monthly_cost": 1650, "status": "active", "recommendation": "Review usage vs API token pricing." },
+          { "service": "GitHub Copilot", "monthly_cost": 830, "status": "active", "recommendation": "Keep if generating revenue." }
+        ]
+      },
+      "active_commitments": [
+        {
+          "name": "Smartphone No-Cost EMI",
+          "monthly_amount": 5500,
+          "remaining_tenure_months": 8,
+          "hidden_charges_detected": "₹199 monthly convenience fee + 18% GST (₹35.82) on subvention discount",
+          "effective_annual_apr": "14.2% (despite advertised 0%)"
+        }
+      ],
+      "transactions": [
+        { "id": "tx_r01", "date": "2026-10-02", "description": "ACH CRED CLIENT GLOBAL TECH STIPEND", "amount": 45000, "type": "CREDIT", "category": "Freelance Income", "is_recurring": false },
+        { "id": "tx_r02", "date": "2026-10-03", "description": "POS ADOBE SYSTEMS RENEWAL INT", "amount": 4200, "type": "DEBIT", "category": "Software Subscriptions", "is_recurring": true, "leak_flag": true },
+        { "id": "tx_r03", "date": "2026-10-04", "description": "UPI/SWIGGY/ORDER_9824219/swiggy@icici", "amount": 480, "type": "DEBIT", "category": "Food Delivery", "is_recurring": false },
+        { "id": "tx_r04", "date": "2026-10-05", "description": "ACH DEBIT APEX BANK PHONE EMI", "amount": 5735, "type": "DEBIT", "category": "Loan EMI", "is_recurring": true, "hidden_fee": 235 },
+        { "id": "tx_r05", "date": "2026-10-07", "description": "UPI/ZEPTO/GROCERIES/zepto@hdfc", "amount": 750, "type": "DEBIT", "category": "Groceries", "is_recurring": false },
+        { "id": "tx_r06", "date": "2026-10-08", "description": "POS AMAZON WEB SERVICES CLOUD", "amount": 1500, "type": "DEBIT", "category": "Software Subscriptions", "is_recurring": true, "leak_flag": true },
+        { "id": "tx_r07", "date": "2026-10-10", "description": "UPI/CHAIPOINT/EVENING/chpoint@okaxis", "amount": 120, "type": "DEBIT", "category": "Dining Out", "is_recurring": false },
+        { "id": "tx_r08", "date": "2026-10-12", "description": "POS FIGMA SUBSCRIPTION CA", "amount": 1250, "type": "DEBIT", "category": "Software Subscriptions", "is_recurring": true, "leak_flag": true },
+        { "id": "tx_r09", "date": "2026-10-14", "description": "UPI/SWIGGY/LUNCH/swiggy@icici", "amount": 350, "type": "DEBIT", "category": "Food Delivery", "is_recurring": false },
+        { "id": "tx_r10", "date": "2026-10-15", "description": "NEFT CRED APEX STUDIOS DESIGN RET", "amount": 40000, "type": "CREDIT", "category": "Freelance Income", "is_recurring": false },
+        { "id": "tx_r11", "date": "2026-10-16", "description": "POS OPENAI CHATGPT PLUS MONTHLY", "amount": 1650, "type": "DEBIT", "category": "AI Tools", "is_recurring": true },
+        { "id": "tx_r12", "date": "2026-10-18", "description": "UPI/ZOMATO/DINNER/zomato@axis", "amount": 620, "type": "DEBIT", "category": "Food Delivery", "is_recurring": false },
+        { "id": "tx_r13", "date": "2026-10-20", "description": "POS GITHUB COPILOT AUTO-DEBIT", "amount": 830, "type": "DEBIT", "category": "Developer Tools", "is_recurring": true },
+        { "id": "tx_r14", "date": "2026-10-22", "description": "UPI/UBER RIDES/COMMUTE/uber@paytm", "amount": 420, "type": "DEBIT", "category": "Transport", "is_recurring": false },
+        { "id": "tx_r15", "date": "2026-10-25", "description": "UPI/APARTMENT RENT/LANDLORD/9811234567@upi", "amount": 22000, "type": "DEBIT", "category": "Rent & Housing", "is_recurring": true }
+      ]
+    },
+    {
+      "id": "persona_salaried_priya",
+      "name": "Priya Sharma",
+      "masked_name": "[USER_PRIMARY]",
+      "profile": "Corporate Marketing Associate",
+      "currency": "INR",
+      "currency_symbol": "₹",
+      "monthly_average_income": 75000,
+      "income_stability": "fixed",
+      "account_summary": {
+        "bank_name": "Horizon Federal Bank",
+        "masked_account_number": "XX..9104",
+        "ifsc_code": "HORZ0004567",
+        "current_balance": 38400,
+        "calculated_runway_months": 2.1
+      },
+      "detected_leaks_summary": {
+        "total_monthly_leakage": 4280,
+        "items_count": 4,
+        "dormant_subscriptions": [
+          { "service": "Crossfit Gym Auto-Renewal", "monthly_cost": 2500, "status": "dormant_30_days", "recommendation": "Unused for 28 days. Convert to pay-per-visit." },
+          { "service": "Credit Card Minimum Balance Fine", "monthly_cost": 590, "status": "predatory_fee", "recommendation": "Maintain ₹10,000 threshold or switch to zero-balance savings." },
+          { "service": "Overdue Late Payment Fee + GST", "monthly_cost": 885, "status": "avoidable_penalty", "recommendation": "Set automated minimum-due mandate." },
+          { "service": "Hotstar Annual Prorated", "monthly_cost": 305, "status": "duplicate_ott", "recommendation": "Bundled free with telecom recharge." }
+        ]
+      },
+      "active_commitments": [
+        {
+          "name": "Auto Loan (Hatchback)",
+          "monthly_amount": 12500,
+          "remaining_tenure_months": 24,
+          "hidden_charges_detected": "Zero foreclosure charges after 12 months (clause 8.2)",
+          "effective_annual_apr": "8.9%"
+        }
+      ],
+      "transactions": [
+        { "id": "tx_p01", "date": "2026-10-01", "description": "NEFT SALARY CRED GLOBEX CORP OCT26", "amount": 75000, "type": "CREDIT", "category": "Salary", "is_recurring": true },
+        { "id": "tx_p02", "date": "2026-10-02", "description": "ACH DEBIT APARTMENT RENT NOV", "amount": 24000, "type": "DEBIT", "category": "Rent & Housing", "is_recurring": true },
+        { "id": "tx_p03", "date": "2026-10-05", "description": "ACH DEBIT AUTO LOAN EMI HORIZON", "amount": 12500, "type": "DEBIT", "category": "Loan EMI", "is_recurring": true },
+        { "id": "tx_p04", "date": "2026-10-06", "description": "POS CULTFIT GYM SUBSCRIPTION", "amount": 2500, "type": "DEBIT", "category": "Health & Fitness", "is_recurring": true, "leak_flag": true },
+        { "id": "tx_p05", "date": "2026-10-08", "description": "POS NETFLIX PREMIUM 4K AUTO", "amount": 649, "type": "DEBIT", "category": "Entertainment", "is_recurring": true },
+        { "id": "tx_p06", "date": "2026-10-09", "description": "POS SPOTIFY PREMIUM FAMILY", "amount": 179, "type": "DEBIT", "category": "Entertainment", "is_recurring": true },
+        { "id": "tx_p07", "date": "2026-10-12", "description": "CHARGE LATE PAYMENT FEE CC 8821", "amount": 750, "type": "DEBIT", "category": "Bank Fees & Fines", "is_recurring": false, "leak_flag": true },
+        { "id": "tx_p08", "date": "2026-10-12", "description": "CHARGE GST ON CC LATE FEE 18PCT", "amount": 135, "type": "DEBIT", "category": "Bank Fees & Fines", "is_recurring": false, "leak_flag": true },
+        { "id": "tx_p09", "date": "2026-10-15", "description": "CHARGE NON-MAINTENANCE MIN BAL", "amount": 590, "type": "DEBIT", "category": "Bank Fees & Fines", "is_recurring": false, "leak_flag": true },
+        { "id": "tx_p10", "date": "2026-10-18", "description": "UPI/NATURESBASKET/STORE/nb@icici", "amount": 3400, "type": "DEBIT", "category": "Groceries", "is_recurring": false },
+        { "id": "tx_p11", "date": "2026-10-21", "description": "UPI/SHELL PETROL/FUEL/shell@barodampay", "amount": 2200, "type": "DEBIT", "category": "Fuel & Commute", "is_recurring": false }
+      ]
+    },
+    {
+      "id": "persona_student_aman",
+      "name": "Aman Joshi",
+      "masked_name": "[USER_PRIMARY]",
+      "profile": "Final Year Engineering Student & Intern",
+      "currency": "INR",
+      "currency_symbol": "₹",
+      "monthly_average_income": 18000,
+      "income_stability": "low",
+      "account_summary": {
+        "bank_name": "Metro Student Savings Bank",
+        "masked_account_number": "XX..3312",
+        "ifsc_code": "METR0008899",
+        "current_balance": 4150,
+        "calculated_runway_months": 0.4
+      },
+      "detected_leaks_summary": {
+        "total_monthly_leakage": 3650,
+        "items_count": 3,
+        "dormant_subscriptions": [
+          { "service": "Coursera Plus Auto-Renew", "monthly_cost": 2900, "status": "dormant_course_finished", "recommendation": "Specialization completed last month. Cancel renewal immediately." },
+          { "service": "BNPL Quick Loan Micro-Interest", "monthly_cost": 450, "status": "predatory_interest", "recommendation": "Hidden 36% annualized interest. Pay off remaining ₹2,000 balance." },
+          { "service": "Music App Hi-Fi Addon", "monthly_cost": 300, "status": "forgotten_addon", "recommendation": "Revert to standard student plan." }
+        ]
+      },
+      "active_commitments": [
+        {
+          "name": "BNPL Micro-Credit Loan",
+          "monthly_amount": 1200,
+          "remaining_tenure_months": 2,
+          "hidden_charges_detected": "Late fee ₹250 per day after due date",
+          "effective_annual_apr": "36.5%"
+        }
+      ],
+      "transactions": [
+        { "id": "tx_a01", "date": "2026-10-01", "description": "IMPS PARENTAL ALLOWANCE OCT", "amount": 10000, "type": "CREDIT", "category": "Allowance", "is_recurring": true },
+        { "id": "tx_a02", "date": "2026-10-05", "description": "UPI/CAMPUS MESS/MEAL PLAN/mess@sbi", "amount": 4500, "type": "DEBIT", "category": "Food & Dining", "is_recurring": true },
+        { "id": "tx_a03", "date": "2026-10-06", "description": "POS COURSERA INC AUTO-RENEW", "amount": 2900, "type": "DEBIT", "category": "Education", "is_recurring": true, "leak_flag": true },
+        { "id": "tx_a04", "date": "2026-10-07", "description": "UPI/TAPRI CHAI/TEA/9988112233@paytm", "amount": 30, "type": "DEBIT", "category": "Quick Snacks", "is_recurring": false },
+        { "id": "tx_a05", "date": "2026-10-08", "description": "UPI/BLINKIT/SNACKS/blinkit@hdfc", "amount": 340, "type": "DEBIT", "category": "Quick Commerce", "is_recurring": false },
+        { "id": "tx_a06", "date": "2026-10-10", "description": "UPI STIPEND CRED STARTUP LABS", "amount": 8000, "type": "CREDIT", "category": "Internship Stipend", "is_recurring": false },
+        { "id": "tx_a07", "date": "2026-10-12", "description": "ACH DEBIT BNPL REPAYMENT INSTAL", "amount": 1200, "type": "DEBIT", "category": "BNPL Loan", "is_recurring": true, "hidden_fee": 150 },
+        { "id": "tx_a08", "date": "2026-10-14", "description": "UPI/CAMPUS BOOKSTORE/STATIONERY/store@axis", "amount": 650, "type": "DEBIT", "category": "Books & Stationery", "is_recurring": false },
+        { "id": "tx_a09", "date": "2026-10-16", "description": "UPI/CHAI POINT/SNACK/chai@upi", "amount": 45, "type": "DEBIT", "category": "Quick Snacks", "is_recurring": false },
+        { "id": "tx_a10", "date": "2026-10-18", "description": "UPI/ZEPTO/ENERGY DRINKS/zepto@icici", "amount": 280, "type": "DEBIT", "category": "Quick Commerce", "is_recurring": false }
+      ]
+    }
+  ]
+}
+
