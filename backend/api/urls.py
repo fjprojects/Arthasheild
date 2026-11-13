@@ -25,6 +25,8 @@ from .views import (
     SubscriptionDetectorView,
     UnusualSpendingDetectorView,
     SpendingPatternAnalyzerView,
+    # Task 17: Imported-session overview
+    ImportedSessionOverviewView,
 )
 
 urlpatterns = [
@@ -53,4 +55,6 @@ urlpatterns = [
     path('insights/subscriptions/', SubscriptionDetectorView.as_view(), name='subscriptions'),
     path('insights/unusual-spending/', UnusualSpendingDetectorView.as_view(), name='unusual-spending'),
     path('insights/spending-patterns/', SpendingPatternAnalyzerView.as_view(), name='spending-patterns'),
+    # Task 17: Imported-session snapshot/overview
+    path('insights/imported-overview/', ImportedSessionOverviewView.as_view(), name='imported-overview'),
 ]

@@ -39,3 +39,13 @@ Thumbs.db
 
 # Exclude raw statement containing identity-like details
 synthetic_data/sample_statement_rohit_raw.csv
+
+# Tooling caches and local scratch space
+.freebuff/
+*.bak
+*.orig
+*.rej
+
+# Local verification artefacts (screenshots, capture output)
+.artifacts/
+artifacts/

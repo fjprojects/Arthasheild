@@ -194,12 +194,15 @@ class TransactionPersistenceAndIntegrityTests(TestCase):
         self.assertEqual(resp.data.get("error"), "CONSENT_REQUIRED")
 
     def test_08_persist_true_stores_with_active_consent(self):
-        # Register consent
-        ConsentAuditView.as_view()(self.factory.post('/api/v1/privacy/consent/', {
-            "session_id": self.session_id,
-            "anonymized_processing_accepted": True,
-            "no_credential_disclosure_acknowledged": True
-        }, format='json'))
+        # Register consent directly in the database (the consent endpoint is now gated)
+        from api.models import ConsentAuditLog
+        ConsentAuditLog.objects.create(
+            session_id=self.session_id,
+            consent_version="v1.0-task17",
+            anonymized_processing_accepted=True,
+            no_credential_disclosure_acknowledged=True,
+            is_active=True,
+        )
 
         csv_text = "Date,Description,Debit,Credit,Balance\n2026-10-04,UPI/SWIGGY,480.00,,40320.00\n"
         req = self.factory.post('/api/v1/data/parse-statement/', {
@@ -215,12 +218,15 @@ class TransactionPersistenceAndIntegrityTests(TestCase):
         self.assertEqual(Transaction.objects.filter(session_id=self.session_id, source_type='import').count(), 1)
 
     def test_09_fingerprint_prevents_duplicate_import(self):
-        # Register consent
-        ConsentAuditView.as_view()(self.factory.post('/api/v1/privacy/consent/', {
-            "session_id": self.session_id,
-            "anonymized_processing_accepted": True,
-            "no_credential_disclosure_acknowledged": True
-        }, format='json'))
+        # Register consent directly in the database (consent endpoint is gated by session auth flow)
+        from api.models import ConsentAuditLog
+        ConsentAuditLog.objects.create(
+            session_id=self.session_id,
+            consent_version="v1.0-task17",
+            anonymized_processing_accepted=True,
+            no_credential_disclosure_acknowledged=True,
+            is_active=True,
+        )
 
         csv_text = "Date,Description,Debit,Credit,Balance\n2026-10-04,UPI/SWIGGY,480.00,,40320.00\n"
         # First import
@@ -239,12 +245,15 @@ class TransactionPersistenceAndIntegrityTests(TestCase):
         self.assertEqual(Transaction.objects.filter(session_id=self.session_id).count(), 1)
 
     def test_10_persona_selection_preserves_imported_transactions(self):
-        # Register consent & import a real transaction
-        ConsentAuditView.as_view()(self.factory.post('/api/v1/privacy/consent/', {
-            "session_id": self.session_id,
-            "anonymized_processing_accepted": True,
-            "no_credential_disclosure_acknowledged": True
-        }, format='json'))
+        # Register consent directly in the database (the consent endpoint is now gated)
+        from api.models import ConsentAuditLog
+        ConsentAuditLog.objects.create(
+            session_id=self.session_id,
+            consent_version="v1.0-task17",
+            anonymized_processing_accepted=True,
+            no_credential_disclosure_acknowledged=True,
+            is_active=True,
+        )
         csv_text = "Date,Description,Debit,Credit,Balance\n2026-10-04,UPI/SWIGGY,480.00,,40320.00\n"
         ParseStatementView.as_view()(self.factory.post('/api/v1/data/parse-statement/', {
             "raw_text": csv_text, "format": "csv", "session_id": self.session_id, "persist": True
@@ -282,8 +291,21 @@ class TransactionPersistenceAndIntegrityTests(TestCase):
         Transaction.objects.create(snapshot=snap1, session_id=self.session_id, normalized_merchant='Test1', amount=Decimal('100.00'), transaction_type='DEBIT', transaction_date=date(2026, 10, 1))
         Transaction.objects.create(snapshot=snap2, session_id=other_session, normalized_merchant='Test2', amount=Decimal('200.00'), transaction_type='DEBIT', transaction_date=date(2026, 10, 1))
 
+        # Register consent for the session directly in the database
+        from api.models import ConsentAuditLog
+        ConsentAuditLog.objects.create(
+            session_id=self.session_id,
+            consent_version="v1.0-task17",
+            anonymized_processing_accepted=True,
+            no_credential_disclosure_acknowledged=True,
+            is_active=True,
+        )
+
         # Nuke session 1
         req = self.factory.post('/api/v1/privacy/nuke-data/', {"session_id": self.session_id}, format='json')
+        # Authenticate the request as the current session so the consent gate passes
+        req.auth_session = self.session
+        req.auth_session_id = self.session_id
         NukeDataView.as_view()(req)
 
         # Session 1 wiped, Session 2 untouched
@@ -291,12 +313,15 @@ class TransactionPersistenceAndIntegrityTests(TestCase):
         self.assertEqual(Transaction.objects.filter(session_id=other_session).count(), 1)
 
     def test_13_stored_merchant_sanitized(self):
-        # Register consent
-        ConsentAuditView.as_view()(self.factory.post('/api/v1/privacy/consent/', {
-            "session_id": self.session_id,
-            "anonymized_processing_accepted": True,
-            "no_credential_disclosure_acknowledged": True
-        }, format='json'))
+        # Register consent directly in the database
+        from api.models import ConsentAuditLog
+        ConsentAuditLog.objects.create(
+            session_id=self.session_id,
+            consent_version="v1.0-task17",
+            anonymized_processing_accepted=True,
+            no_credential_disclosure_acknowledged=True,
+            is_active=True,
+        )
 
         # Import transaction with raw account number in description
         csv_text = "Date,Description,Debit,Credit,Balance\n2026-10-04,UPI/SWIGGY/ORDER_rohit@okaxis,480.00,,40320.00\n"

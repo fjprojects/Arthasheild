@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ambient background - behaviour check</title>
+    <style>
+      html, body { margin: 0; background: #000; height: 100%; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!--
+      Behaviour harness for the AmbientBackground component.
+
+      Two things are patched before the component mounts:
+
+      1. requestAnimationFrame is redirected to a timer. Some environments
+         (headless browsers in particular) never composite a frame, so the
+         real rAF never fires and the animation cannot be observed at all.
+         The counter makes the loop observable.
+
+      2. prefers-reduced-motion can be forced with ?motion=reduce, so the
+         static path can be exercised.
+    -->
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var forceReduce = params.get('motion') === 'reduce';
+        window.__ambient = { frames: 0, rafRequests: 0, hidden: false };
+
+        var realMatchMedia = window.matchMedia.bind(window);
+        window.matchMedia = function (query) {
+          if (String(query).indexOf('prefers-reduced-motion') !== -1) {
+            return {
+              matches: forceReduce,
+              media: query,
+              onchange: null,
+              addEventListener: function () {},
+              removeEventListener: function () {},
+              addListener: function () {},
+              removeListener: function () {},
+              dispatchEvent: function () { return false; },
+            };
+          }
+          return realMatchMedia(query);
+        };
+
+        var realRaf = window.requestAnimationFrame.bind(window);
+        window.requestAnimationFrame = function (callback) {
+          window.__ambient.rafRequests++;
+          return window.setTimeout(function () {
+            window.__ambient.frames++;
+            callback(window.performance.now());
+          }, 16);
+        };
+        window.cancelAnimationFrame = function (handle) {
+          window.clearTimeout(handle);
+        };
+        window.__ambientRealRaf = realRaf;
+      })();
+    </script>
+    <script type="module">
+      import React, { StrictMode } from 'react';
+      import { createRoot } from 'react-dom/client';
+      import AmbientBackground from '/src/components/effects/AmbientBackground.jsx';
+
+      // StrictMode mirrors the real application (src/main.jsx), so the double
+      // mount behaviour is exercised here as well.
+      createRoot(document.getElementById('root')).render(
+        React.createElement(StrictMode, null, React.createElement(AmbientBackground, null)),
+      );
+    </script>
+  </body>
+</html>

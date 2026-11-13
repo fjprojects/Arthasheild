@@ -13,6 +13,7 @@ from pdfminer.pdfdocument import PDFPasswordIncorrect
 
 from .models import NormalizedTransaction, StatementParseResult
 from .normalizer import TransactionNormalizer
+from .errors import StatementParseError
 
 MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 MAX_PDF_PAGES = 15
@@ -44,36 +45,40 @@ class BankStatementParser:
         and ensures temporary files are destroyed after processing.
         """
         if not file_obj:
-            raise ValueError("No file provided for statement parsing.")
+            raise StatementParseError("No file provided for statement parsing.")
 
         ext = Path(filename).suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
-            raise ValueError(f"Unsupported file format '{ext}'. Only CSV, PDF, and TXT files are supported.")
+            # The extension comes from the uploaded file name and is therefore
+            # untrusted: it is never echoed back to the client.
+            raise StatementParseError(
+                "Unsupported file format. Only CSV, PDF, and TXT files are supported."
+            )
 
         # Read content bytes safely to check size
         if hasattr(file_obj, 'size') and file_obj.size > MAX_FILE_SIZE_BYTES:
-            raise ValueError(f"File size exceeds maximum allowed limit of {MAX_FILE_SIZE_BYTES // (1024*1024)}MB.")
+            raise StatementParseError(f"File size exceeds maximum allowed limit of {MAX_FILE_SIZE_BYTES // (1024*1024)}MB.")
 
         if hasattr(file_obj, 'read'):
             content = file_obj.read()
         elif isinstance(file_obj, (bytes, bytearray)):
             content = bytes(file_obj)
         else:
-            raise ValueError("Invalid file object provided.")
+            raise StatementParseError("Invalid file object provided.")
 
         if len(content) == 0:
-            raise ValueError("The uploaded statement file is empty (0 bytes).")
+            raise StatementParseError("The uploaded statement file is empty (0 bytes).")
 
         if len(content) > MAX_FILE_SIZE_BYTES:
-            raise ValueError(f"File size exceeds maximum allowed limit of {MAX_FILE_SIZE_BYTES // (1024*1024)}MB.")
+            raise StatementParseError(f"File size exceeds maximum allowed limit of {MAX_FILE_SIZE_BYTES // (1024*1024)}MB.")
 
         # Validate file signature / magic bytes to prevent extension spoofing
         if ext == '.pdf':
             if not (content.startswith(b'%PDF-') or b'%PDF-' in content[:1024]):
-                raise ValueError("Invalid PDF file signature. Content does not match PDF format.")
+                raise StatementParseError("Invalid PDF file signature. Content does not match PDF format.")
         elif ext in ('.csv', '.txt'):
             if b'\x00' in content:
-                raise ValueError(f"Invalid {ext.upper()[1:]} file content. Binary data detected.")
+                raise StatementParseError(f"Invalid {ext.upper()[1:]} file content. Binary data detected.")
 
         # Dispatch based on extension
         if ext == '.csv':
@@ -83,7 +88,7 @@ class BankStatementParser:
         elif ext == '.txt':
             return cls.parse_txt_bytes(content)
         else:
-            raise ValueError(f"Unsupported file format: {ext}")
+            raise StatementParseError("Unsupported file format. Only CSV, PDF, and TXT files are supported.")
 
     @classmethod
     def parse_csv_bytes(cls, content_bytes: bytes) -> StatementParseResult:
@@ -95,8 +100,10 @@ class BankStatementParser:
         except UnicodeDecodeError:
             try:
                 text = content_bytes.decode('latin-1')
-            except Exception as e:
-                raise ValueError(f"Unable to decode CSV file: {str(e)}")
+            except Exception:
+                # The decoder message can quote the offending bytes: it is
+                # never echoed back to the client.
+                raise StatementParseError("Unable to decode CSV file: unsupported character encoding.")
 
         return cls.parse_csv_text(text)
 
@@ -107,7 +114,7 @@ class BankStatementParser:
         """
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         if not lines:
-            raise ValueError("Statement content is empty.")
+            raise StatementParseError("Statement content is empty.")
 
         account_info = cls._extract_metadata_from_lines(lines)
         reader = csv.reader(lines)
@@ -115,7 +122,7 @@ class BankStatementParser:
 
         header_idx, col_map = cls._find_table_header(rows)
         if header_idx is None:
-            raise ValueError("Could not detect transaction table header in CSV statement.")
+            raise StatementParseError("Could not detect transaction table header in CSV statement.")
 
         transactions: List[NormalizedTransaction] = []
         errors: List[str] = []
@@ -129,13 +136,15 @@ class BankStatementParser:
             if parsed_tx:
                 transactions.append(parsed_tx)
             else:
-                # If row looks like a footer or summary, ignore; else log error
+                # If row looks like a footer or summary, ignore; else log error.
+                # The warning keeps the row number (which identifies the problem)
+                # but never reproduces the row content.
                 row_str = " ".join(row).lower()
                 if not any(k in row_str for k in ['total', 'opening balance', 'closing balance', 'page']):
-                    errors.append(f"Row {idx}: Failed to extract valid transaction ({', '.join(row[:3])})")
+                    errors.append(f"Row {idx}: Failed to extract a valid transaction.")
 
         if not transactions:
-            raise ValueError("No valid transactions found in the CSV statement.")
+            raise StatementParseError("No valid transactions found in the CSV statement.")
 
         # Deduplicate
         unique_txs, dups = TransactionNormalizer.deduplicate_transactions(transactions)
@@ -183,9 +192,9 @@ class BankStatementParser:
         try:
             with pdfplumber.open(pdf_path) as pdf:
                 if len(pdf.pages) == 0:
-                    raise ValueError("The uploaded PDF statement has 0 pages.")
+                    raise StatementParseError("The uploaded PDF statement has 0 pages.")
                 if len(pdf.pages) > MAX_PDF_PAGES:
-                    raise ValueError(f"PDF exceeds maximum allowed page limit of {MAX_PDF_PAGES} pages.")
+                    raise StatementParseError(f"PDF exceeds maximum allowed page limit of {MAX_PDF_PAGES} pages.")
 
                 all_text = ""
                 all_table_rows: List[List[str]] = []
@@ -201,14 +210,19 @@ class BankStatementParser:
                             if any(cleaned_row):
                                 all_table_rows.append(cleaned_row)
 
+        except StatementParseError:
+            # A controlled message from our own parser (page limit, empty
+            # document, ...) is returned as-is: it never carries content.
+            raise
         except PDFPasswordIncorrect:
-            raise ValueError("Password-protected PDF statements are not supported. Please upload an unprotected PDF.")
-        except PDFSyntaxError as e:
-            raise ValueError(f"Corrupted or invalid PDF file: {str(e)}")
+            raise StatementParseError("Password-protected PDF statements are not supported. Please upload an unprotected PDF.")
+        except PDFSyntaxError:
+            # The parser message can quote document content: it is not echoed.
+            raise StatementParseError("Corrupted or invalid PDF file.")
         except Exception as e:
             if "password" in str(e).lower():
-                raise ValueError("Password-protected PDF statements are not supported.")
-            raise ValueError(f"Failed to process PDF statement: {str(e)}")
+                raise StatementParseError("Password-protected PDF statements are not supported.")
+            raise StatementParseError("Failed to process PDF statement.")
 
         account_info = cls._extract_metadata_from_lines(all_text.splitlines())
 
@@ -272,7 +286,7 @@ class BankStatementParser:
 
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         if not lines:
-            raise ValueError("Text statement content is empty.")
+            raise StatementParseError("Text statement content is empty.")
 
         account_info = cls._extract_metadata_from_lines(lines)
 
@@ -487,7 +501,7 @@ class BankStatementParser:
             if not date_match:
                 continue
 
-            raw_date = date_match.group(1)
+            raw_date = date_match.group(0)
             try:
                 parsed_date = TransactionNormalizer.parse_date(raw_date)
             except ValueError:
@@ -526,7 +540,7 @@ class BankStatementParser:
             ))
 
         if not transactions:
-            raise ValueError("No valid transactions found in statement.")
+            raise StatementParseError("No valid transactions found in statement.")
 
         unique_txs, _ = TransactionNormalizer.deduplicate_transactions(transactions)
         total_debits = sum(t.amount for t in unique_txs if t.transaction_type == 'DEBIT')

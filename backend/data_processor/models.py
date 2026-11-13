@@ -5,6 +5,8 @@ from typing import Optional, Dict, Any, List
 import uuid
 import hashlib
 
+from .errors import StatementParseError
+
 @dataclass
 class NormalizedTransaction:
     """
@@ -31,7 +33,9 @@ class NormalizedTransaction:
             try:
                 self.amount = Decimal(str(self.amount))
             except (InvalidOperation, TypeError, ValueError):
-                raise ValueError(f"Invalid transaction amount: {self.amount}")
+                # The offending value can be arbitrary statement content: it is
+                # never included in the error message.
+                raise StatementParseError("Invalid transaction amount.")
 
         # Amount must be non-negative in the normalized record; direction is determined by transaction_type
         if self.amount < Decimal('0'):
@@ -40,7 +44,9 @@ class NormalizedTransaction:
         # Enforce transaction_type
         self.transaction_type = self.transaction_type.upper().strip()
         if self.transaction_type not in ('DEBIT', 'CREDIT'):
-            raise ValueError(f"Transaction type must be 'DEBIT' or 'CREDIT', got: '{self.transaction_type}'")
+            # The supplied type can be arbitrary statement content: it is never
+            # included in the error message.
+            raise StatementParseError("Transaction type must be 'DEBIT' or 'CREDIT'.")
 
         # Normalize currency
         if not self.currency:

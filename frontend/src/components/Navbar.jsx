@@ -1,5 +1,8 @@
 import React from 'react';
-import { Menu, Lock, Trash2, User, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Menu } from 'lucide-react';
+import CrypticText from './effects/CrypticText';
+import PersonaOrb from './ui/PersonaOrb';
+import SecurityCommandCenter from './SecurityCommandCenter';
 
 export default function Navbar({
   pageTitle = 'Overview & Health',
@@ -10,106 +13,56 @@ export default function Navbar({
   isNuking,
   onOpenMobile,
   hasConsented = false,
+  isWithdrawingConsent = false,
   onWithdrawConsent,
   onOpenConsentModal,
 }) {
   return (
-    <header className="h-16 border-b border-zinc-800 bg-black sticky top-0 z-30 px-6 flex items-center justify-between select-none">
+    <header className="h-16 border-b border-[#202020] bg-black/85 backdrop-blur-md sticky top-0 z-30 px-2.5 sm:px-4 lg:px-6 flex items-center justify-between gap-2 sm:gap-3 select-none">
       
-      {/* Left: Mobile Menu Toggle & Title */}
-      <div className="flex items-center space-x-3">
+      {/* Left: Mobile Menu Toggle & Title with Typewriter effect */}
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <button
           onClick={onOpenMobile}
           aria-label="Open navigation menu"
-          className="md:hidden p-1.5 text-zinc-400 hover:text-white border border-zinc-800"
+          className="interactive-control shrink-0 md:hidden p-1.5 text-[#AAAAAA] hover:text-white border border-[#202020] hover:border-white"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center space-x-3">
-          <h2 className="text-xs sm:text-sm font-bold uppercase tracking-[0.15em] text-white font-mono m-0">
-            {pageTitle}
+        {/* The title yields to the persona module on narrow screens rather
+            than forcing the navbar to overflow. It returns at md. */}
+        <div className="hidden min-w-0 items-center gap-2 md:flex">
+          <div className="hidden items-center gap-1.5 text-[9px] font-mono text-[#8A8A8A] uppercase lg:flex">
+            <span>TERMINAL</span>
+            <span>::</span>
+          </div>
+          {/* The page title is an h2, not an h1: the panels below it start at
+              h3, and an h1 here would skip a level for every one of them
+              (WCAG "heading order"). The persona card is an h2 for the same
+              reason. */}
+          <h2 className="m-0 max-w-[130px] truncate text-xs font-bold uppercase tracking-[0.2em] text-white font-mono lg:max-w-[220px] xl:max-w-none">
+            <CrypticText text={pageTitle} mode="typewriter" speed={20} triggerKey={pageTitle} />
           </h2>
         </div>
       </div>
 
-      {/* Right: Persona Switcher, Consent Toggle & Data Shredder */}
-      <div className="flex items-center space-x-3">
-        
-        {/* Synthetic Persona Selector */}
-        <div className="flex items-center border border-zinc-800 p-0.5">
-          <span className="hidden lg:flex items-center gap-1.5 text-[10px] font-mono uppercase text-zinc-500 px-2.5">
-            Persona:
-          </span>
-          <div className="flex space-x-0.5">
-            {personas.map((p) => {
-              const isSelected = selectedPersona?.id === p.id;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => onSelectPersona(p.id)}
-                  className={`text-[10px] font-mono uppercase px-2.5 py-1 transition-colors cursor-pointer ${
-                    isSelected
-                      ? 'bg-white text-black font-bold'
-                      : 'text-zinc-500 hover:text-white'
-                  }`}
-                >
-                  {p.name.split(' ')[0]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      {/* Right: Persona Switcher + the coordinated security command strip */}
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2 lg:gap-3">
+        <PersonaOrb
+          personas={personas}
+          selectedId={selectedPersona?.id}
+          onSelect={onSelectPersona}
+        />
 
-        {/* Consent Status & Toggle */}
-        <div className="hidden sm:flex items-center border border-zinc-800 px-2 py-1 space-x-2 text-[10px] font-mono uppercase">
-          {hasConsented ? (
-            <>
-              <span className="flex items-center gap-1 text-white font-bold">
-                <ShieldCheck className="w-3 h-3 text-white" />
-                Consent Active
-              </span>
-              <button
-                onClick={onWithdrawConsent}
-                className="text-zinc-500 hover:text-white border-l border-zinc-800 pl-2 cursor-pointer uppercase transition-colors"
-                title="Revoke active consent under DPDP standards"
-              >
-                Withdraw
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="flex items-center gap-1 text-zinc-500">
-                <ShieldAlert className="w-3 h-3 text-zinc-500" />
-                Unconsented
-              </span>
-              <button
-                onClick={onOpenConsentModal}
-                className="text-white hover:underline border-l border-zinc-800 pl-2 cursor-pointer font-bold uppercase transition-colors"
-              >
-                Grant
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Zero Credentials Badge */}
-        <div className="hidden xl:flex items-center space-x-1.5 text-[10px] font-mono uppercase text-zinc-400 border border-zinc-800 px-2 py-1">
-          <Lock className="w-3 h-3 text-white" />
-          <span>Zero Credentials</span>
-        </div>
-
-        {/* Nuke Data Button */}
-        <button
-          onClick={onNukeData}
-          disabled={isNuking}
-          title="Permanently erase all session data and records"
-          className="flex items-center space-x-1.5 text-[10px] font-mono font-bold uppercase px-3 py-1.5 bg-black hover:bg-white text-zinc-300 hover:text-black border border-zinc-700 hover:border-white transition-colors disabled:opacity-50 cursor-pointer"
-        >
-          <Trash2 className="w-3 h-3" />
-          <span>{isNuking ? 'SHREDDING...' : 'NUKE DATA'}</span>
-        </button>
-
+        <SecurityCommandCenter
+          hasConsented={hasConsented}
+          isWithdrawing={isWithdrawingConsent}
+          onWithdrawConsent={onWithdrawConsent}
+          onOpenConsentModal={onOpenConsentModal}
+          onNukeData={onNukeData}
+          isNuking={isNuking}
+        />
       </div>
     </header>
   );

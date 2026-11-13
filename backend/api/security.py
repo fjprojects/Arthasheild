@@ -1,12 +1,15 @@
 import hashlib
 from typing import Tuple, Optional
+import hashlib
+from typing import Tuple, Optional
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
-from .models import SecureSession
+from .models import SecureSession, ConsentAuditLog
 
 
 def extract_session_token(request) -> Optional[str]:
@@ -41,8 +44,35 @@ def extract_session_token(request) -> Optional[str]:
     return None
 
 
+def extract_explicit_session_token(request) -> Optional[str]:
+    """
+    Extracts only an explicitly presented credential (custom header or
+    Authorization header).
+
+    The cookie fallback is deliberately excluded here. The session bootstrap uses
+    this to tell "the client wants to resume *this* session" apart from "the
+    browser happens to carry a cookie", so resuming a session always requires
+    the client to name it.
+    """
+    token = request.headers.get("X-Session-Token")
+    if not token and hasattr(request, "META"):
+        token = request.META.get("HTTP_X_SESSION_TOKEN")
+    if token:
+        return token.strip()
+
+    auth_header = request.headers.get("Authorization") or (
+        request.META.get("HTTP_AUTHORIZATION") if hasattr(request, "META") else None
+    )
+    if auth_header:
+        parts = auth_header.strip().split()
+        if len(parts) == 2 and parts[0].lower() in ("bearer", "session", "token"):
+            return parts[1].strip()
+
+    return None
+
+
 def authenticate_request_session(
-    request, required: bool = True
+    request, required: bool = True, require_consent: bool = True
 ) -> Tuple[Optional[SecureSession], Optional[Response]]:
     """
     Authenticates the request against server-issued SecureSession records.
@@ -71,6 +101,26 @@ def authenticate_request_session(
         SecureSession.objects.filter(token_hash=token_hash, is_revoked=False)
         .first()
     )
+
+    consent = None
+    if session and require_consent:
+        consent = (
+            ConsentAuditLog.objects.filter(session_id=session.session_id, is_active=True)
+            .order_by("-consented_at")
+            .first()
+        )
+        if not consent or not (
+            consent.anonymized_processing_accepted
+            and consent.no_credential_disclosure_acknowledged
+        ):
+            return None, Response(
+                {
+                    "error": "CONSENT_REQUIRED",
+                    "code": "CONSENT_REQUIRED",
+                    "detail": "Active user consent is required before this operation.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
     if not session:
         return None, Response(

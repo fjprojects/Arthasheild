@@ -299,6 +299,13 @@ Date,Description,Debit,Credit,Balance
 
     def test_task_16_existing_api_regression_tests(self):
         reg_sec, reg_tok = SecureSession.issue_session("reg_test")
+        ConsentAuditLog.objects.create(
+            session_id="reg_test",
+            consent_version="v1.0-task17",
+            anonymized_processing_accepted=True,
+            no_credential_disclosure_acknowledged=True,
+            is_active=True,
+        )
 
         # Persona List
         r_personas = PersonaListView.as_view()(self.factory.get('/api/v1/personas/'))

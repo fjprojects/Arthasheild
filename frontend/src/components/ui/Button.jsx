@@ -3,8 +3,8 @@ import { Loader2 } from "lucide-react";
 import { cn } from "./utils";
 
 /**
- * ArthaShield Design System — Button Component
- * Adapted from LabTwin component architecture with dark fintech visual tokens.
+ * ArthaShield Design System — Monochrome Button Component
+ * Features strict black, white, silver & charcoal styling with venom-flash reaction support.
  */
 export function Button({
   children,
@@ -20,28 +20,28 @@ export function Button({
   ...props
 }) {
   const baseStyles =
-    "inline-flex items-center justify-center font-semibold tracking-tight transition-all duration-150 cursor-pointer select-none active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:opacity-45 disabled:cursor-not-allowed disabled:pointer-events-none disabled:active:scale-100";
+    "interactive-control inline-flex items-center justify-center font-mono font-medium tracking-tight cursor-pointer select-none disabled:opacity-35 disabled:cursor-not-allowed disabled:pointer-events-none uppercase";
 
   const sizeStyles = {
-    sm: "px-2.5 py-1 text-xs gap-1.5 rounded-lg",
-    md: "px-3.5 py-2 text-xs gap-2 rounded-xl",
-    lg: "px-5 py-2.5 text-sm gap-2.5 rounded-xl font-bold",
-    icon: "p-2 rounded-xl aspect-square",
+    sm: "px-2.5 py-1 text-[11px] gap-1.5",
+    md: "px-4 py-2 text-xs gap-2",
+    lg: "px-6 py-2.5 text-sm gap-2.5 font-bold tracking-wider",
+    icon: "p-2 aspect-square",
   };
 
   const variantStyles = {
     primary:
-      "bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold border border-emerald-400/30 shadow-md shadow-emerald-500/15 hover:shadow-emerald-500/25",
+      "bg-white hover:bg-zinc-200 text-black font-bold border border-white shadow-[0_0_15px_rgba(255,255,255,0.15)] hover:shadow-[0_0_22px_rgba(255,255,255,0.35)]",
     secondary:
-      "bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-slate-700 shadow-sm",
+      "bg-[#111111] hover:bg-[#202020] text-white border border-[#202020] hover:border-[#AAAAAA]",
     outline:
-      "bg-transparent hover:bg-slate-800/60 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-600",
+      "bg-transparent hover:bg-white text-white hover:text-black border border-[#AAAAAA] hover:border-white shadow-sm",
     ghost:
-      "bg-transparent hover:bg-slate-800/60 text-slate-400 hover:text-slate-100 border border-transparent",
+      "bg-transparent hover:bg-[#111111] text-[#AAAAAA] hover:text-white border border-transparent",
     danger:
-      "bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:border-rose-500/50 shadow-sm shadow-rose-950/40",
+      "bg-black hover:bg-white text-white hover:text-black border border-white font-bold tracking-wider",
     accent:
-      "bg-indigo-600 hover:bg-indigo-500 text-white font-bold border border-indigo-400/30 shadow-md shadow-indigo-600/20 hover:shadow-indigo-600/30",
+      "bg-[#202020] hover:bg-white text-white hover:text-black border border-zinc-700 hover:border-white",
   };
 
   return (
@@ -69,4 +69,3 @@ export function Button({
 }
 
 export default Button;
-

@@ -172,6 +172,23 @@ class Transaction(models.Model):
 class DecisionScenario(models.Model):
     """
     What-If EMI and Purchase Simulator records.
+
+    `true_effective_apr` is NULLABLE and its meaning is always qualified by
+    `apr_status`:
+
+    * ``'OK'`` - a genuine computed effective annual borrowing cost. The column
+      holds the value; ``0.0`` here means a genuine zero-cost loan.
+    * ``'NOT_APPLICABLE'`` - no principal was financed, so no cost exists.
+    * ``'UNAVAILABLE'`` - the dated cash-flow calculation could not produce a
+      reliable rate (e.g. the upfront fee exceeds the disbursement).
+    * ``'LEGACY_SUPERSEDED'`` - historical row whose value came from the
+      superseded fee-load formula, not from the cash-flow (XIRR) calculation.
+    * ``'LEGACY_AMBIGUOUS_ZERO'`` - historical row that stored ``0.0`` and can
+      no longer be told apart from a genuine zero-cost loan. The value was
+      cleared rather than silently presented as a 0% result.
+
+    A NULL `true_effective_apr` therefore never means "a 0% loan"; it always
+    means "no reliable value", and `apr_status` explains why.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session_id = models.CharField(max_length=128, blank=True)
@@ -180,7 +197,8 @@ class DecisionScenario(models.Model):
     tenure_months = models.IntegerField(default=12)
     down_payment = models.DecimalField(max_digits=12, decimal_places=2, default=0.0)
     nominal_apr = models.FloatField(default=0.0)
-    true_effective_apr = models.FloatField(default=0.0)
+    true_effective_apr = models.FloatField(null=True, blank=True)
+    apr_status = models.CharField(max_length=32, null=True, blank=True)
     monthly_outflow = models.DecimalField(max_digits=12, decimal_places=2)
     total_hidden_fees = models.DecimalField(max_digits=12, decimal_places=2, default=0.0)
     is_viable = models.BooleanField(default=True)

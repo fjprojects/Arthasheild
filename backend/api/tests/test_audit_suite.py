@@ -257,6 +257,11 @@ class APIEndpointAuditTests(TestCase):
         self.assertIn("error", resp.data)
 
     def test_10_nuke_data_hard_purge(self):
+        req1 = self.factory.post('/api/v1/privacy/nuke-data/', {'session_id': self.session_id}, format='json')
+        resp1 = NukeDataView.as_view()(req1)
+        self.assertEqual(resp1.status_code, 200)
+
+    def test_11_nuke_data_idempotent(self):
         # Create some persona data first
         self.factory.post('/api/v1/personas/select/', {"persona_id": "persona_freelancer_rohit", "session_id": self.session_id}, format='json')
         req = self.factory.post('/api/v1/privacy/nuke-data/', {"session_id": self.session_id}, format='json')

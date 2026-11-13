@@ -5,6 +5,8 @@ from typing import Optional, Tuple, List, Set, Dict, Any
 import hashlib
 
 from .models import NormalizedTransaction
+from .transfers import classify_own_account_transfer
+from .errors import StatementParseError
 
 # Regex for currency symbols, commas, and whitespace
 CURRENCY_PREFIXES = re.compile(r'^(?:INR|RS\.?|₹|\$|USD)\s*', re.IGNORECASE)
@@ -36,7 +38,7 @@ class TransactionNormalizer:
           - Negative numbers (-500.00 or (500.00))
         """
         if raw_val is None:
-            raise ValueError("Amount cannot be None")
+            raise StatementParseError("Amount cannot be None")
 
         if isinstance(raw_val, (int, float)):
             val_str = str(raw_val)
@@ -44,7 +46,7 @@ class TransactionNormalizer:
             val_str = str(raw_val).strip()
 
         if not val_str:
-            raise ValueError("Empty amount string")
+            raise StatementParseError("Empty amount string")
 
         direction_hint: Optional[str] = None
 
@@ -79,7 +81,9 @@ class TransactionNormalizer:
             decimal_amount = Decimal(val_clean)
             return abs(decimal_amount), direction_hint
         except (InvalidOperation, TypeError):
-            raise ValueError(f"Unable to parse amount from value: '{raw_val}'")
+            # The offending value can be an arbitrary statement cell: it is
+            # never included in the error message.
+            raise StatementParseError("Unable to parse the amount value.")
 
     @staticmethod
     def parse_date(raw_date: Any) -> date:
@@ -93,7 +97,7 @@ class TransactionNormalizer:
             return raw_date
 
         if not raw_date:
-            raise ValueError("Date cannot be empty")
+            raise StatementParseError("Date cannot be empty")
 
         date_str = str(raw_date).strip()
 
@@ -137,7 +141,9 @@ class TransactionNormalizer:
             except ValueError:
                 pass
 
-        raise ValueError(f"Unrecognized date format: '{raw_date}'")
+        # The raw cell value can be arbitrary statement content: it is never
+        # included in the error message.
+        raise StatementParseError("Unrecognized date format.")
 
     @staticmethod
     def extract_merchant(raw_description: str) -> str:
@@ -148,6 +154,14 @@ class TransactionNormalizer:
             return "Unspecified Merchant"
 
         desc = raw_description.strip()
+
+        # An own-account transfer narration ("UPI/SELF/TRANSFER") would otherwise
+        # collapse to a bare "Self" and lose the evidence that this is an
+        # internal movement rather than a payment. Keep the reason visible in a
+        # stable, self-describing label so the classification stays correct.
+        transfer = classify_own_account_transfer(desc)
+        if transfer['is_own_account_transfer'] and transfer.get('label'):
+            return transfer['label']
 
         # Strip common payment rail prefixes
         cleaned = RAIL_PREFIXES.sub('', desc).strip()
@@ -222,7 +236,9 @@ class TransactionNormalizer:
         # Enforce direction
         final_type = (dir_hint or transaction_type).upper().strip()
         if final_type not in ('DEBIT', 'CREDIT'):
-            raise ValueError(f"Invalid transaction type: '{transaction_type}'")
+            # The supplied type can be arbitrary statement content: it is
+            # never included in the error message.
+            raise StatementParseError("Invalid transaction type.")
 
         parsed_balance = None
         if available_balance is not None and str(available_balance).strip():
@@ -254,8 +270,14 @@ class TransactionNormalizer:
     @staticmethod
     def deduplicate_transactions(transactions: List[NormalizedTransaction]) -> Tuple[List[NormalizedTransaction], int]:
         """
-        Deduplicates transaction lists based on deterministic canonical keys:
-        Key: (date, amount, transaction_type, reference_id or clean_description).
+        Deduplicates a parsed statement using reliable identity evidence only:
+        Key: (date, amount, transaction_type, reference_id) when a reference exists.
+
+        Rows without a reference are NOT collapsed merely because their date, amount
+        and description match: those may be two legitimate identical payments. Such
+        rows are preserved here; repeat-import protection is applied later by the
+        occurrence-aware import fingerprint in api.views._compute_fingerprint.
+
         Returns:
             Tuple of (unique_transactions_list, duplicate_count)
         """
@@ -264,11 +286,13 @@ class TransactionNormalizer:
         duplicates_removed = 0
 
         for tx in transactions:
-            # Canonical key
             ref = (tx.reference_id or "").lower().strip()
-            # If no reference, use normalized merchant + last 2 words of description
-            desc_part = (tx.merchant or tx.description).lower().strip()
-            key = f"{tx.transaction_date.isoformat()}_{tx.amount:.2f}_{tx.transaction_type}_{ref or desc_part}"
+            if not ref:
+                # No reliable identifier: preserve the row instead of guessing.
+                unique_list.append(tx)
+                continue
+
+            key = f"{tx.transaction_date.isoformat()}_{tx.amount:.2f}_{tx.transaction_type}_{ref}"
 
             if key in seen_keys:
                 duplicates_removed += 1

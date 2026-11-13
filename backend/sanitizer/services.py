@@ -120,7 +120,7 @@ class SanitizerService:
                     "type": "USER_NAME_OR_ADDRESS",
                     "placeholder": placeholder,
                     "count": count,
-                    "description": "Scrubbed primary user identification / geographic branch address"
+                    "description": "Scrubbed primary identity details / geographic branch address"
                 })
 
         # 2. Financial RegEx sanitization in strict specificity order
