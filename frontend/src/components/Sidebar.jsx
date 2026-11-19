@@ -10,7 +10,8 @@ import {
   Shield,
   Lock,
   Zap,
-  X
+  X,
+  Scale
 } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 
@@ -77,16 +78,22 @@ const NAV_ITEMS = [
     code: 'SYS_04',
   },
   {
+    id: 'STRESS_TEST',
+    label: 'Commitment Stress Test',
+    icon: Scale,
+    code: 'SYS_05',
+  },
+  {
     id: 'EMI_SIMULATOR',
     label: 'EMI Reality Check',
     icon: Calculator,
-    code: 'SYS_05',
+    code: 'SYS_06',
   },
   {
     id: 'AUDIT_LEDGER',
     label: 'Audit Ledger',
     icon: ReceiptText,
-    code: 'SYS_06',
+    code: 'SYS_07',
   },
 ];
 

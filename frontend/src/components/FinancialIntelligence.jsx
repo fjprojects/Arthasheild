@@ -27,8 +27,23 @@ import CrypticText from './effects/CrypticText';
 import TargetLock from './effects/TargetLock';
 import { Card } from './ui/Card';
 
-export default function FinancialIntelligence({ sessionId = null, onRefreshParent }) {
-  const [includePersona, setIncludePersona] = useState(false);
+export default function FinancialIntelligence({
+  sessionId = null,
+  onRefreshParent,
+  includePersona: parentIncludePersona,
+  onIncludePersonaChange,
+  datasetSourceLabel,
+}) {
+  // The app owns one active dataset selection. This control still works when
+  // the component is mounted standalone, but in the dashboard it derives from
+  // and propagates back to that single app-level source.
+  const [localIncludePersona, setLocalIncludePersona] = useState(false);
+  const includePersona =
+    typeof parentIncludePersona === 'boolean' ? parentIncludePersona : localIncludePersona;
+  const handleIncludePersonaChange = (next) => {
+    if (onIncludePersonaChange) onIncludePersonaChange(next);
+    else setLocalIncludePersona(next);
+  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -128,6 +143,9 @@ export default function FinancialIntelligence({ sessionId = null, onRefreshParen
             <span className="border border-white bg-black px-2 py-0.5 text-[9px] uppercase text-white font-bold tracking-widest">
               PHASE 2 ENGINE
             </span>
+            <span className="border border-[#404040] bg-[#111111] px-2 py-0.5 text-[8px] uppercase text-[#CCCCCC] font-bold tracking-wider">
+              {datasetSourceLabel || (includePersona ? 'DEMO PERSONA · SCENARIO' : 'IMPORTED STATEMENT · OBSERVED')}
+            </span>
             <span className="text-[10px] uppercase text-[#AAAAAA] tracking-widest flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
               FINANCIAL INTELLIGENCE COGNITION
@@ -147,10 +165,10 @@ export default function FinancialIntelligence({ sessionId = null, onRefreshParen
             <input 
               type="checkbox"
               checked={includePersona}
-              onChange={(e) => setIncludePersona(e.target.checked)}
-              className="rounded-none border-[#404040] bg-black accent-white cursor-pointer h-3.5 w-3.5"
+              onChange={(e) => handleIncludePersonaChange(e.target.checked)}
+              className="rounded-none border-[#404040] bg-black accent-white cursor-pointer h-4 w-4"
             />
-            <span>Include Synthetic Persona</span>
+            <span>Use Demo Persona Dataset</span>
           </label>
 
           <TargetLock>

@@ -452,6 +452,10 @@ class AdvisorScenarioTests(AdvisorTestBase):
     # -- scenario 9 ---------------------------------------------------------
     def test_09_scenario_provider_unavailable_or_timeout(self):
         self.make_snapshot()
+        # An imported row is required for the selected dataset to be available;
+        # without it the view correctly reports INSUFFICIENT_DATA instead of
+        # inventing figures from a snapshot alone.
+        self.add_tx(date(2026, 10, 1), 75000, "CREDIT", "Client Global Tech Stipend")
         for label, mock_setup in (
             ("timeout", _raise_timeout),
             ("network error", _raise_network_error),
@@ -494,6 +498,7 @@ class AdvisorScenarioTests(AdvisorTestBase):
     # -- authority of the deterministic engine ------------------------------
     def test_11_the_ai_cannot_overwrite_the_deterministic_figures(self):
         self.make_snapshot()
+        self.add_tx(date(2026, 10, 1), 75000, "CREDIT", "Client Global Tech Stipend")
         hostile = {
             "plain_english_summary": "Your income is 999999 and you save 888888.",
             "top_actionable_wins": [

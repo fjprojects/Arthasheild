@@ -30,7 +30,9 @@ ArthaShield takes a different route: the user's own statement is parsed **locall
 | **Imported-session financial overview** | A dashboard computed over *your* imported statement: income, net living expenses, savings, runways, safe-to-spend and a scrubbed transaction ledger. | Deterministic |
 | **Commitment vs. pattern** | Distinguishes a **subscription commitment**, a **fixed obligation** (rent/EMI/utility/insurance) and **repeated discretionary spending** (a café, a supermarket) — a repeat is not automatically a commitment. | Deterministic |
 | **Own-account transfer detection** | Recognises `UPI/SELF/TRANSFER` and friends as movements between your own accounts, so they never inflate income or expenses. | Deterministic |
+| **Commitment Stress Test & Judgment Flip** | Evaluates a purchase/EMI across 3 scenarios (Buy Now vs. EMI vs. Wait), models 90-day cash flow trajectories, detects safety floor breaches, and calculates the exact day a decision flips to SAFE. | Deterministic Python math |
 | **"What-If" EMI reality check** | Simulates a purchase with fees and GST and reports the **effective annual borrowing cost (XIRR)** from the real cash flows. | Deterministic |
+| **Evidence-Linked Decision Support** | "Show Me The Evidence" connects every verdict directly to verified session ledger transactions; supports human correction of misclassified records. | Deterministic Ledger |
 | **Privacy Inspector** | Live split view: what was masked, how many tokens, and what the sanitized stream looks like before it is used. | Deterministic |
 | **Optional AI commentary** | A language model may explain the *sanitized* stream. It never computes a number and its answer is schema-validated before it is shown. | Model (advisory only) |
 | **Ambient atmosphere** | A continuously morphing organic sand texture behind every screen, drawn on two lightweight canvases. It carries no data and never intercepts a click. | Visual only |
@@ -80,6 +82,54 @@ node scripts/verify-ambient-background.mjs
 ```
 
 ---
+
+
+---
+
+## 2.2 The signature experience: Commitment Stress Test & Judgment Flip
+
+ArthaShield evolves from a retrospective financial dashboard into an active **financial commitment decision-support system**.
+
+Central user question:
+> **"What happens to my financial situation if I make this commitment?"**
+
+New central positioning:
+> **"ArthaShield doesn't just tell you whether you can afford something. It shows you what could go wrong, when it could happen, and exactly what would change the decision."**
+
+### Three-Scenario Reality Check
+
+| Scenario | What is evaluated | Key calculations |
+|---|---|---|
+| **Scenario A: Buy Now** | Immediate lump-sum cash outflow. | Immediate liquidity drain, remaining balance, post-purchase runway, 90-day cash flow trajectory. |
+| **Scenario B: Buy with EMI** | Financed instalment plan with hidden fees and GST. | Base EMI, monthly convenience fee, upfront disbursement fee, 18% GST load, XIRR true borrowing cost, buffer consumption %. |
+| **Scenario C: Wait (The Flip)** | Delaying the purchase by a selectable number of days (0 to 90d slider). | Accumulated savings during wait: net daily cash flow (`income - burn`) × `delay_days`. If expenses exceed income, capital burning is accurately modeled (reducing balance over time). Safe flip is identified as unattainable when cash flow is negative. |
+
+### The Judgment Flip
+When a proposed commitment is `NOT SAFE` or `CONDITIONAL` today, the engine calculates the **Safe Flip Threshold**:
+* Identifies how many days of net savings accumulation are required to elevate the financial cushion.
+* Moving the delay slider dynamically recalculates the 90-day cash flow.
+* When the accumulated buffer is sufficient, the system triggers the **Judgment Flip Banner**:
+  `⚡ JUDGMENT FLIP ACTIVATED: Waiting 30 days accumulates ₹18,400 in net savings, flipping your verdict from NOT SAFE to SAFE!`
+
+### Commitment Safety Card & Decision Verdicts
+Labels are strictly deterministic and rule-based (never hallucinated):
+* **SAFE**: Post-purchase emergency runway >= 3.0 months, safety buffer intact, no cash-flow deficit in 90 days.
+* **CONDITIONAL**: Emergency buffer breached, runway between 1.0 and 3.0 months, or commitment consumes 25-45% of discretionary buffer.
+* **NOT SAFE**: Immediate liquidity deficit (balance < 0), projected account deficit within 90 days, runway < 1.0 month, or commitment consumes > 45% of discretionary buffer.
+* **INSUFFICIENT DATA**: Missing verified liquid balance or unverified/irregular income. Never displays a false green verdict.
+
+### "Show Me The Evidence"
+Every verdict is backed by genuine session transactions from the authenticated ledger:
+* Operating Income: Verified payroll/contract credits (unclassified peer transfers withheld).
+* Fixed Obligations: Confirmed rent and loan EMIs.
+* Subscriptions: Confirmed recurring charges.
+* Human Correction: Users can mark an expense as an internal own-account transfer or adjust categories, triggering instant recalculation with a persistent audit trail.
+
+### "What Would Make This Safe?" Scenario Explorer
+Provides up to three actionable deterministic alternatives:
+1. **Delay Purchase**: Exact days required to build a sufficient safety cushion.
+2. **Discretionary Spending Reduction**: Trimming flexible dining/shopping to free up buffer.
+3. **Restructure Tenure**: Extending instalment months to lower monthly outflow below critical thresholds.
 
 ## 3. System architecture
 
@@ -144,7 +194,7 @@ The UI is then available at `http://localhost:5173/`.
 ### 4.3 Tests and production build
 
 ```bash
-# Backend: the full automated suite (473 tests)
+# Backend: the full automated suite (559 tests)
 cd backend
 python manage.py test api advisor analytics sanitizer
 
@@ -440,3 +490,15 @@ cd frontend && npm run lint && npm run build
 
 The suite is the contract: it asserts the financial arithmetic, the privacy
 boundary and the session/consent rules rather than the shape of the UI.
+
+---
+
+## 10. Engineering Limitations & Boundary Disclosures
+
+In accordance with responsible fintech engineering principles:
+
+1. **Storage Persistence:** When deployed on Render without a dedicated persistent PostgreSQL `DATABASE_URL`, the application falls back to local SQLite ephemeral storage. Data does not persist across container restarts. Do not claim durable long-term storage in that mode.
+2. **Synthetic Data Recommendation:** For demonstrations and testing, always use the provided synthetic personas (`synthetic_data/personas.json`) or synthetic CSV statements. Do not upload live confidential banking credentials or real statements into ephemeral deployments.
+3. **AI Provider Guardrails:** The Gemini AI copilot is strictly advisory. It receives only pre-computed metrics and sanitized text. All cited transaction IDs are validated in Python against the active session before display; hallucinated IDs are stripped. Without an API key, the system runs in high-fidelity deterministic offline mode.
+4. **Unsupported Statement Formats:** Password-protected PDFs, scanned image PDFs without selectable text layers, and non-standard multi-currency ledgers without clear debit/credit delimiters are currently unsupported and will return controlled parse error messages.
+5. **Regulatory Disclaimer:** ArthaShield is an educational decision-support copilot designed for hackathons and consumer awareness. It does not provide certified financial advice, credit underwriting, or formal DPDP/GDPR compliance certification.

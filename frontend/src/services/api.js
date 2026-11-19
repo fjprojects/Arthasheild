@@ -262,11 +262,13 @@ export const api = {
   },
 
   // Analyze sanitized text with LLM (Unconditional active consent verified on backend)
-  analyzeDocument: async (sanitizedText, sessionId = null) => {
+  // include_persona tells the backend which active dataset owns the metrics.
+  analyzeDocument: async (sanitizedText, sessionId = null, includePersona = false) => {
     const sid = await resolveActiveSession(sessionId);
     const res = await apiClient.post('/documents/analyze/', {
       sanitized_text: sanitizedText,
       session_id: sid,
+      include_persona: includePersona,
     });
     return res.data;
   },
@@ -405,6 +407,47 @@ export const api = {
     const sid = await resolveActiveSession(sessionId);
     const res = await apiClient.post('/insights/imported-overview/', {
       session_id: sid,
+    });
+    return res.data;
+  },
+
+  // Evidence-Based Financial Insights Briefing
+  getEvidenceBriefing: async (sessionId = null, includePersona = false) => {
+    const sid = await resolveActiveSession(sessionId);
+    const res = await apiClient.post('/insights/evidence-briefing/', {
+      session_id: sid,
+      include_persona: includePersona,
+    });
+    return res.data;
+  },
+
+  // Commitment Stress Test & Judgment Flip
+  runCommitmentStressTest: async (params = {}, sessionId = null) => {
+    const sid = await resolveActiveSession(sessionId);
+    const res = await apiClient.post('/analytics/commitment-stress-test/', {
+      session_id: sid,
+      ...params,
+    });
+    return res.data;
+  },
+
+  // Explain Commitment Stress Test with verified AI
+  explainCommitmentStressTest: async (decisionPacket, sessionId = null) => {
+    const sid = await resolveActiveSession(sessionId);
+    const res = await apiClient.post('/analytics/commitment-stress-test/explain/', {
+      session_id: sid,
+      decision_packet: decisionPacket,
+    });
+    return res.data;
+  },
+
+  // Human Correction of Uncertain Transactions
+  correctTransaction: async (transactionId, correctionParams = {}, sessionId = null) => {
+    const sid = await resolveActiveSession(sessionId);
+    const res = await apiClient.post('/insights/correct-transaction/', {
+      session_id: sid,
+      transaction_id: transactionId,
+      ...correctionParams,
     });
     return res.data;
   },

@@ -100,14 +100,15 @@ class CategorizationTests(TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['category'], 'food')
 
-    def test_categorize_transactions_include_persona(self):
+    def test_categorize_transactions_selects_persona_dataset_only(self):
         session_id = 'test_cat_02'
         snap = _make_snapshot(session_id)
         _make_tx(snap, session_id, 'Swiggy', 480, 'DEBIT', date(2026, 10, 4), source_type='import')
         _make_tx(snap, session_id, 'PersonaData', 999, 'DEBIT', date(2026, 10, 5), source_type='persona')
 
         result = categorize_transactions(session_id, include_persona=True)
-        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['source_type'], 'persona')
 
     def test_empty_session_returns_empty(self):
         result = categorize_transactions('nonexistent_session_xyz')

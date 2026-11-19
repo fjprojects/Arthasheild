@@ -22,13 +22,25 @@ import CrypticText from './effects/CrypticText';
 import { Card } from './ui/Card';
 import api from '../services/api';
 
-export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: propSubscriptions }) {
+export default function LeakageRadar({
+  leaksSummary,
+  sessionId,
+  subscriptions: propSubscriptions,
+  includePersona = false,
+  datasetSourceLabel,
+  reportingPeriod,
+}) {
+  const sourceLabel = datasetSourceLabel || (includePersona ? 'DEMO PERSONA · SCENARIO' : 'IMPORTED STATEMENT · OBSERVED');
   const [liveSubs, setLiveSubs] = useState(propSubscriptions || []);
   const [metricsSummary, setMetricsSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(null);
   const [expandedIdx, setExpandedIdx] = useState(null);
   const [activeMode, setActiveMode] = useState('LIVE'); // 'LIVE' | 'DEMO'
+
+  useEffect(() => {
+    setActiveMode('LIVE');
+  }, [includePersona, sessionId]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -49,7 +61,9 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
     setLoading(true);
     setFetchError(null);
 
-    api.getSubscriptions(sessionId)
+    // The evidence-based recurring detector is the source of truth for both
+    // datasets. Static persona leakage summaries are only scenario references.
+    api.getSubscriptions(sessionId, includePersona)
       .then(res => {
         if (!isCancelled) {
           if (res && res.subscriptions) {
@@ -63,7 +77,7 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
       })
       .catch(err => {
         if (!isCancelled) {
-          console.warn('Failed to fetch recurring subscriptions for LeakageRadar:', err);
+          console.warn('Failed to fetch recurring payments for LeakageRadar:', err);
           setLiveSubs([]);
           setMetricsSummary(null);
           setFetchError(err.response?.data?.error || 'Unable to scan journal for recurring payments.');
@@ -78,26 +92,27 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
     return () => {
       isCancelled = true;
     };
-  }, [sessionId, propSubscriptions]);
+  }, [sessionId, propSubscriptions, includePersona]);
 
-  // Determine active item list based on mode
   const hasLive = liveSubs && liveSubs.length > 0;
-  const hasPersona = leaksSummary && leaksSummary.dormant_subscriptions && leaksSummary.dormant_subscriptions.length > 0;
-
-  // Auto-select mode if only one available
-  const currentMode = (activeMode === 'DEMO' && hasPersona) || !hasLive ? 'DEMO' : 'LIVE';
+  // Imported mode never reads the persona summary. In persona mode it is shown
+  // only as an explicitly unverified scenario reference.
+  const hasPersona = includePersona && Boolean(leaksSummary?.dormant_subscriptions?.length);
+  const currentMode = includePersona
+    ? ((activeMode === 'DEMO' && hasPersona) || !hasLive ? 'DEMO' : 'LIVE')
+    : 'LIVE';
 
   let items = [];
-  let confirmedMonthly = 0;   // confirmed financial commitments (subscription + fixed obligation)
+  let confirmedMonthly = 0;   // evidence-backed commitments (subscription + fixed obligation)
   let probableMonthly = 0;   // probable commitments pending review
-  let avoidableMonthly = 0;   // confirmed subscription commitments (potentially avoidable)
-  let essentialMonthly = 0;   // fixed obligations (rent, instalment, insurance, utility)
+  let avoidableMonthly = 0;   // confirmed recurring payments eligible for review
+  let essentialMonthly = 0;   // obligations: rent, instalment, insurance, utility
   let patternMonthly = 0;   // repeated discretionary spending - observed, not a commitment
+  let scenarioReviewMonthly = 0; // static persona scenario only, never evidence
   let weakCount = 0;
 
   if (currentMode === 'LIVE' && hasLive) {
     items = liveSubs.map(s => {
-      const isIrregular = s.cadence === 'irregular';
       const mCost = s.estimated_monthly_cost !== null && s.estimated_monthly_cost !== undefined
         ? parseFloat(s.estimated_monthly_cost)
         : null;
@@ -108,20 +123,17 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
       const conf = s.confidence || 'PROBABLE';
       const pType = s.payment_type || 'subscription';
       const commitmentClass = s.commitment_class || null;
-      // Task 23: a recurrence is not automatically a commitment. Only a
-      // confirmed commitment reserves money; repeated discretionary spending is
-      // reported as an observed pattern.
       const isCommitment = s.is_financial_commitment === true;
       const isAvoidable = s.is_potential_leakage === true;
       const isPattern = commitmentClass === 'recurring_discretionary' || commitmentClass === 'recurring_pattern';
       const isEssential = ['rent', 'emi_or_loan', 'utility', 'insurance'].includes(pType);
+      const evidenceIds = Array.isArray(s.candidate_transaction_ids) ? s.candidate_transaction_ids : [];
 
       if (conf === 'CONFIRMED' && mCost !== null && isCommitment) {
         confirmedMonthly += mCost;
         if (isAvoidable) avoidableMonthly += mCost;
         if (isEssential) essentialMonthly += mCost;
       } else if (conf === 'CONFIRMED' && mCost !== null && isPattern) {
-        // Observed repeated spending: never counted as a confirmed commitment.
         patternMonthly += mCost;
       } else if (conf === 'PROBABLE' && mCost !== null) {
         probableMonthly += mCost;
@@ -147,51 +159,57 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
         recurrence_confidence: s.recurrence_confidence || conf,
         amount_variation: s.amount_variation || 'fixed',
         amount_range: s.observed_amount_range || null,
-        occurrence_count: s.occurrence_count || (s.candidates ? 2 : 1),
+        occurrence_count: s.occurrence_count || evidenceIds.length || 1,
         next_date: s.estimated_next_date,
         is_past_projection: s.is_past_projection,
         projection_status: s.projection_status,
         evidence: s.evidence || [],
         dates: s.transaction_dates || [],
         amounts: s.transaction_amounts || [],
-        recommendation: isAvoidable
-          ? 'Recurring subscription charge. Review whether it is still used: cancelling it would free this amount each month. Usage is not visible in the statement, so this is a review, not an established saving.'
-          : isEssential
-          ? 'Essential commitment (rent, instalment, insurance or utility). Non-cancelable outflow in the usual case; monitor the observed amount rather than trying to reduce it.'
+        scenario: includePersona,
+        review_status: isEssential ? 'OBLIGATION' : isAvoidable ? 'REVIEW PAYMENT' : isPattern ? 'OBSERVED SPENDING' : 'REVIEW CANDIDATE',
+        recommendation: isEssential
+          ? 'Fixed obligation (rent, instalment, insurance or utility). It is excluded from avoidable leakage; monitor the observed amount rather than treating it as a cancellation target.'
+          : isAvoidable
+          ? 'Recurring payment detected from ledger evidence. Usage and renewal terms are not visible in the statement, so this is a review candidate, not a verified saving.'
           : isPattern
-          ? 'Repeated discretionary spending. The amount shown is the observed average of the pattern, not a fixed commitment - it is not counted towards confirmed monthly outflow.'
-          : 'Review the counterparty pattern in the audit journal; no commitment evidence was found.',
+          ? 'Repeated discretionary spending. The amount is the observed average, not a fixed commitment, and is not counted as recoverable money.'
+          : 'Recurrence evidence is incomplete. Review the audit journal before classifying this payment.',
       };
     });
-  } else if (leaksSummary) {
+  } else if (includePersona && leaksSummary) {
     const personaSubs = leaksSummary.dormant_subscriptions || [];
-    const pTotal = leaksSummary.total_monthly_leakage || 0;
-    confirmedMonthly = pTotal;
-    avoidableMonthly = pTotal;
+    scenarioReviewMonthly = leaksSummary.total_monthly_leakage || 0;
     items = personaSubs.map(s => ({
       service: s.service,
       monthly_cost: s.monthly_cost || 0,
       annual_cost: (s.monthly_cost || 0) * 12,
       observed_total: null,
-      status: s.status?.replace(/_/g, ' ') || 'SUBSCRIPTION',
-      payment_type: 'subscription',
-      commitment_class: 'subscription_commitment',
-      is_commitment: true,
-      is_avoidable: true,
+      status: 'SCENARIO REVIEW',
+      payment_type: 'review_payment',
+      commitment_class: 'scenario_reference',
+      is_commitment: false,
+      is_avoidable: false,
       is_pattern: false,
       is_essential: false,
       cadence: 'monthly',
-      confidence: 'CONFIRMED',
-      recurrence_confidence: 'CONFIRMED',
+      confidence: 'UNVERIFIED',
+      recurrence_confidence: 'UNVERIFIED',
       amount_variation: 'fixed',
       amount_range: null,
-      occurrence_count: 2,
-      recommendation: s.recommendation || 'Review the recurring charge: cancelling it would free this amount each month if it is no longer used.',
-      evidence: ['Pre-configured synthetic scenario demonstration'],
+      occurrence_count: 0,
+      scenario: true,
+      review_status: 'SCENARIO · UNVERIFIED',
+      recommendation: `Scenario reference only: ${s.recommendation || 'review this recurring payment'}. This static demo value is not evidence of a real charge or a verified saving.`,
+      evidence: ['Static synthetic persona scenario — not live transaction evidence'],
       dates: [],
       amounts: [],
     }));
   }
+
+  // ChatGPT Plus and GitHub Copilot appear in the persona scenario reference
+  // above (and in the evidence detector when their ledger rows are present).
+  // They are always review payments, never verified savings.
 
   const confirmedAnnual = confirmedMonthly * 12;
 
@@ -207,6 +225,12 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
         return (
           <span className="border border-amber-500/60 bg-amber-950/40 text-amber-300 text-[9px] font-mono uppercase px-2 py-0.5 tracking-wider font-bold">
             PROBABLE
+          </span>
+        );
+      case 'UNVERIFIED':
+        return (
+          <span className="border border-zinc-500 bg-zinc-900 text-zinc-300 text-[9px] font-mono uppercase px-2 py-0.5 tracking-wider font-bold">
+            SCENARIO · UNVERIFIED
           </span>
         );
       case 'WEAK':
@@ -239,7 +263,7 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
           Leakage Radar Scanning Active Journal
         </h3>
         <p className="text-xs text-[#888888] max-w-md mx-auto leading-relaxed">
-          {fetchError || 'Zero recurring drains or subscription traps detected in imported statement transactions. Multi-month import history is recommended to confirm monthly or quarterly cadence.'}
+          {fetchError || 'No recurring payments were detected in the selected dataset. Multi-month history is recommended to confirm cadence; rent and loan instalments are reported as obligations, not leakage.'}
         </p>
       </Card>
     );
@@ -259,64 +283,69 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
             <span className="border border-white bg-black px-2 py-0.5 text-[9px] font-mono uppercase text-white font-bold tracking-widest">
               RADAR
             </span>
+            <span className="border border-[#404040] bg-[#111111] text-[#CCCCCC] text-[8px] font-mono uppercase px-1.5 py-0.5 tracking-wider">
+              {sourceLabel}
+            </span>
+            <span className="border border-[#303030] bg-black text-[#888888] text-[8px] font-mono uppercase px-1.5 py-0.5 tracking-wider">
+              {reportingPeriod || 'PERIOD NOT AVAILABLE'}
+            </span>
             <span className="text-[10px] font-mono uppercase text-[#AAAAAA] tracking-widest flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
-              {items.length} RECURRING STREAMS IDENTIFIED
+              {items.length} RECURRING PAYMENTS FOUND
             </span>
-            {hasLive && (
+            {hasLive && currentMode === 'LIVE' && (
               <span className="border border-emerald-500/40 bg-emerald-950/20 text-emerald-400 text-[8px] font-mono uppercase px-1.5 py-0.2 tracking-widest">
-                LIVE STATEMENT AUDIT
+                {includePersona ? 'PERSONA SCENARIO EVIDENCE' : 'IMPORTED STATEMENT EVIDENCE'}
               </span>
             )}
-            {/* View Mode Toggle Pill Buttons */}
             {hasLive && hasPersona && (
               <div className="flex items-center gap-1 ml-2 border border-[#333333] p-0.5 bg-black">
                 <button
                   type="button"
                   onClick={() => setActiveMode('LIVE')}
                   className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-bold transition-colors ${
-                    currentMode === 'LIVE' 
-                      ? 'bg-white text-black' 
+                    currentMode === 'LIVE'
+                      ? 'bg-white text-black'
                       : 'text-[#888888] hover:text-white'
                   }`}
                 >
-                  Live Statement
+                  Ledger Evidence
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveMode('DEMO')}
                   className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-bold transition-colors ${
-                    currentMode === 'DEMO' 
-                      ? 'bg-white text-black' 
+                    currentMode === 'DEMO'
+                      ? 'bg-white text-black'
                       : 'text-[#888888] hover:text-white'
                   }`}
                 >
-                  Demo Persona
+                  Scenario Reference
                 </button>
               </div>
             )}
           </div>
           <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-white m-0 font-mono">
-            Recurring Commitment & Leakage Intelligence
+            Recurring Payments &amp; Obligations
           </h3>
           <p className="text-xs font-mono text-[#AAAAAA] max-w-xl leading-relaxed m-0">
-            Separates confirmed commitments (subscriptions and fixed obligations) from repeated
-            discretionary spending and from patterns without any commitment evidence.
+            Evidence-based recurring payments are split into confirmed commitments, probable review
+            candidates and observed spending. Rent and loan instalments are obligations, not leakage.
           </p>
         </div>
 
-        {/* Financial metrics with Segregated Confirmed vs Discretionary */}
+        {/* Financial metrics with Segregated Confirmed vs Review vs Obligations */}
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-8 border-t lg:border-t-0 lg:border-l border-[#202020] pt-4 lg:pt-0 lg:pl-8">
           <div>
             <div className="text-4xl sm:text-5xl font-mono tracking-tighter text-white font-bold">
               <CrypticText text={`₹${Math.round(confirmedMonthly).toLocaleString('en-IN')}`} triggerKey={confirmedMonthly} />
             </div>
             <div className="text-[9px] uppercase text-emerald-400 font-mono tracking-widest mt-2 flex items-center gap-1">
-              <span>● Confirmed Monthly Commitment</span>
+              <span>● Confirmed Commitments (evidence)</span>
             </div>
             {probableMonthly > 0 && (
               <div className="text-[8px] uppercase text-amber-400/90 font-mono tracking-wider mt-1">
-                + ₹{Math.round(probableMonthly).toLocaleString('en-IN')}/mo Probable Review
+                + ₹{Math.round(probableMonthly).toLocaleString('en-IN')}/mo Probable · review needed
               </div>
             )}
           </div>
@@ -326,14 +355,19 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
               <CrypticText text={`₹${Math.round(avoidableMonthly).toLocaleString('en-IN')}`} triggerKey={avoidableMonthly} />
             </div>
             <div className="text-[9px] uppercase text-amber-300 font-mono tracking-widest mt-2">
-              Potentially Avoidable Recurring
+              Confirmed Payments to Review
             </div>
             <div className="text-[8px] uppercase text-[#888888] font-mono tracking-wider mt-1">
-              ₹{Math.round(essentialMonthly).toLocaleString('en-IN')}/mo Essential Fixed
+              ₹{Math.round(essentialMonthly).toLocaleString('en-IN')}/mo Obligations (excluded from review)
             </div>
             {patternMonthly > 0 && (
               <div className="text-[8px] uppercase text-[#888888] font-mono tracking-wider mt-1">
                 ₹{Math.round(patternMonthly).toLocaleString('en-IN')}/mo Repeated Spending (not a commitment)
+              </div>
+            )}
+            {scenarioReviewMonthly > 0 && (
+              <div className="text-[8px] uppercase text-zinc-400 font-mono tracking-wider mt-1">
+                ₹{Math.round(scenarioReviewMonthly).toLocaleString('en-IN')}/mo Scenario Review · UNVERIFIED
               </div>
             )}
           </div>
@@ -368,6 +402,11 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
                   <div className="flex flex-wrap items-center gap-1.5 pt-1">
                     {getPaymentTypeBadge(sub.status, sub.is_essential)}
                     {getConfidenceBadge(sub.confidence)}
+                    {sub.review_status && (
+                      <span className="border border-[#303030] bg-[#0E0E0E] text-[#AAAAAA] text-[8px] font-mono uppercase px-1.5 py-0.5 tracking-wider">
+                        {sub.review_status}
+                      </span>
+                    )}
                     {sub.commitment_class && (
                       <span className={`border text-[8px] font-mono uppercase px-1.5 py-0.5 tracking-wider ${
                         sub.is_commitment
@@ -504,7 +543,7 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
         })}
       </div>
 
-      {/* Evidence-Aware Runway Recovery Callout */}
+      {/* Evidence-aware review protocol — no verified savings claims */}
       <Card
         interactive={false}
         className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 font-mono text-xs text-[#AAAAAA]"
@@ -513,25 +552,34 @@ export default function LeakageRadar({ leaksSummary, sessionId, subscriptions: p
           <Terminal className="w-4 h-4 text-white shrink-0 mt-0.5 sm:mt-0" />
           <div className="space-y-0.5">
             <div>
-              <strong className="text-white uppercase font-bold">Runway Recovery: </strong> 
-              Reviewing the recurring subscriptions could free up to{' '}
+              <strong className="text-white uppercase font-bold">Review Protocol: </strong>
               <strong className="text-amber-300">₹{Math.round(avoidableMonthly).toLocaleString('en-IN')}/mo</strong>{' '}
-              into emergency reserves, if those subscriptions are no longer used.
+              is the value of confirmed recurring payments flagged for review. Usage is not visible
+              in the statement, so no amount is a verified saving until you confirm the charge is
+              unwanted and actually stop it.
             </div>
             {essentialMonthly > 0 && (
               <div className="text-[10px] text-[#777777]">
-                Essential commitments (₹{Math.round(essentialMonthly).toLocaleString('en-IN')}/mo for Rent, EMI, Utilities, Insurance) are preserved and excluded from cancellation savings.
+                Obligations (₹{Math.round(essentialMonthly).toLocaleString('en-IN')}/mo for rent, loan EMIs, utilities, insurance) are excluded from review amounts.
               </div>
             )}
             {patternMonthly > 0 && (
               <div className="text-[10px] text-[#777777]">
-                Repeated discretionary spending (₹{Math.round(patternMonthly).toLocaleString('en-IN')}/mo) is an observed spending pattern, not a commitment - it is not counted as recoverable savings.
+                Repeated discretionary spending (₹{Math.round(patternMonthly).toLocaleString('en-IN')}/mo) is an observed pattern, not a commitment or recoverable amount.
               </div>
             )}
+            {scenarioReviewMonthly > 0 && (
+              <div className="text-[10px] text-zinc-400">
+                Static persona scenario review amount: ₹{Math.round(scenarioReviewMonthly).toLocaleString('en-IN')}/mo (unverified, not live evidence). Includes ChatGPT Plus and GitHub Copilot as review payments.
+              </div>
+            )}
+            <div className="text-[9px] text-[#777777] uppercase tracking-wider">
+              {sourceLabel} · {reportingPeriod || 'PERIOD NOT AVAILABLE'} · CONFIDENCE: OBSERVED EVIDENCE / SCENARIO UNVERIFIED
+            </div>
           </div>
         </div>
         <span className="border border-white bg-black px-2.5 py-1 text-[9px] uppercase font-bold text-white tracking-widest shrink-0">
-          +₹{Math.round(avoidableMonthly).toLocaleString('en-IN')}/MO REVIEWABLE
+          ₹{Math.round(avoidableMonthly).toLocaleString('en-IN')}/MO REVIEW
         </span>
       </Card>
 

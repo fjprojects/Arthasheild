@@ -83,6 +83,26 @@ class SanitizerService:
         )
     }
 
+    # Contextual redaction runs BEFORE general-length patterns. An explicit
+    # label such as ``Account Number:`` or ``A/C:`` is stronger evidence of the
+    # identifier type than a 16-digit card-shaped pattern, so it must win even
+    # when the account number happens to look like a card number. Card labels
+    # are handled in the same pass so a genuine ``Debit Card:`` value is never
+    # demoted to an account placeholder. Values may be grouped with spaces or
+    # hyphens; the trailing lookahead prevents a separator from being captured.
+    _CONTEXT_VALUE = r'[0-9Xx*](?:[0-9Xx*]|[\s-](?=[0-9Xx*])){7,31}'
+    CONTEXT_ACCOUNT_PATTERN = re.compile(
+        r'(?:\bA/C\b|\bAccount(?:\s*(?:Number|No\.?))?\b|'
+        r'\bAcct(?:\s*(?:Number|No\.?))?\b|\bAcc\s*No\b)[\s.:#-]*'
+        r'(' + _CONTEXT_VALUE + r')',
+        re.IGNORECASE,
+    )
+    CONTEXT_CARD_PATTERN = re.compile(
+        r'\b(?:Debit\s*Card|Credit\s*Card|Card)(?:\s*(?:Number|No\.?))?\b'
+        r'[\s.:#-]*(' + _CONTEXT_VALUE + r')',
+        re.IGNORECASE,
+    )
+
     # Headers for structured user identity & personal metadata
     HEADER_PATTERNS = [
         (re.compile(r'(?:Account\s*Holder|Customer\s*Name|Name)\s*:\s*([^\r\n,]+)', re.IGNORECASE), "[USER_PRIMARY]"),
@@ -123,7 +143,33 @@ class SanitizerService:
                     "description": "Scrubbed primary identity details / geographic branch address"
                 })
 
-        # 2. Financial RegEx sanitization in strict specificity order
+        # 2. Contextual precedence pass. Only the redaction type, placeholder
+        # and count are logged; the matched financial digits are never recorded.
+        for label, pattern, placeholder, pii_type in (
+            ("account", cls.CONTEXT_ACCOUNT_PATTERN, "[REDACTED_ACCOUNT]", "ACCOUNT_NUMBER"),
+            ("card", cls.CONTEXT_CARD_PATTERN, "[REDACTED_CARD]", "CREDIT_DEBIT_CARD"),
+        ):
+            matches = list(pattern.finditer(sanitized_text))
+            if not matches:
+                continue
+            count = 0
+            for match in matches:
+                value = match.group(1)
+                if value and placeholder not in value:
+                    sanitized_text = sanitized_text.replace(value, placeholder)
+                    count += 1
+            if count:
+                redactions_performed.append({
+                    "type": pii_type,
+                    "placeholder": placeholder,
+                    "count": count,
+                    "description": (
+                        f"Detected and masked {count} instance(s) of {label} "
+                        "identifier from explicit statement context"
+                    ),
+                })
+
+        # 3. Financial RegEx sanitization in strict specificity order
         for pii_type, (pattern, placeholder) in cls.PATTERNS.items():
             matches = list(pattern.finditer(sanitized_text))
             if matches:
@@ -139,7 +185,7 @@ class SanitizerService:
                     "description": f"Detected and masked {count} instance(s) of {pii_type.lower().replace('_', ' ')}"
                 })
 
-        # 3. Fail-safe mask for leftover consecutive 12-16 digit numbers (unlabeled card or account numbers)
+        # 4. Fail-safe mask for leftover consecutive 12-16 digit numbers (unlabeled card or account numbers)
         leftover_digits_pattern = re.compile(r'\b\d{12,16}\b')
         leftover_matches = list(leftover_digits_pattern.finditer(sanitized_text))
         if leftover_matches:

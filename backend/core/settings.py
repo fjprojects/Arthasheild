@@ -239,6 +239,7 @@ if IS_PRODUCTION:
 
     allowed_origins = [
         "https://arthashield.vercel.app",
+        "https://arthasheild.vercel.app",
     ]
 
     frontend_url = os.environ.get("FRONTEND_URL")

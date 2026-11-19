@@ -39,7 +39,7 @@ Date,Description,Debit,Credit,Balance
 2026-10-16,POS OPENAI CHATGPT PLUS MONTHLY US-1182,1650.00,,70185.00
 2026-10-25,UPI/APARTMENT RENT/LANDLORD/9811234567@upi,22000.00,,48185.00`;
 
-export default function PrivacyInspector({ sessionId = null, onImportSuccess }) {
+export default function PrivacyInspector({ sessionId = null, onImportSuccess, includePersona = false, datasetSourceLabel }) {
   const [rawText, setRawText] = useState(SAMPLE_RAW_STATEMENT);
   const [sanitizedData, setSanitizedData] = useState(null);
   const [analysisInsights, setAnalysisInsights] = useState(null);
@@ -102,8 +102,12 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess }) 
     if (!sanitizedData) return;
     setIsAnalyzing(true);
     try {
-      const result = await api.analyzeDocument(sanitizedData.sanitized_text_preview);
+      // The backend derives every quoted figure from the active dataset only.
+      // Pass that selection through so an imported statement can never be
+      // explained with persona snapshot numbers (or vice versa).
+      const result = await api.analyzeDocument(sanitizedData.sanitized_text_preview, sessionId, includePersona);
       setAnalysisInsights(result.advisor_insights);
+      const metrics = result.metrics || {};
       setAnalysisMeta({
         source: result.analysis_source || result.advisor_insights?.source || 'OFFLINE_RULE_BASED',
         isAiGenerated: result.is_ai_generated || false,
@@ -111,6 +115,11 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess }) 
         geminiAvailable: result.gemini_available || false,
         model: result.advisor_insights?.model || null,
         privacyGuarantee: result.privacy_guarantee,
+        datasetSource: datasetSourceLabel || metrics.data_source || 'UNSPECIFIED',
+        datasetStatus: metrics.dataset_status || 'UNSPECIFIED',
+        reportingPeriod: metrics.reporting_period?.label || 'PERIOD NOT AVAILABLE',
+        runwayStatus: metrics.runway_status || 'NOT PROVIDED',
+        metricBasis: metrics.metric_basis || null,
       });
     } catch (err) {
       console.error(err);
@@ -391,6 +400,28 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess }) 
             )}
           </div>
 
+          {/* Dataset provenance: value source, period and observed/estimated status */}
+          {analysisMeta && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[9px] font-mono uppercase tracking-wider">
+              <div className="border border-[#202020] bg-black p-2.5">
+                <span className="block text-[#777777]">Dataset source</span>
+                <span className="block text-white font-bold mt-1">{analysisMeta.datasetSource}</span>
+              </div>
+              <div className="border border-[#202020] bg-black p-2.5">
+                <span className="block text-[#777777]">Reporting period</span>
+                <span className="block text-white font-bold mt-1">{analysisMeta.reportingPeriod}</span>
+              </div>
+              <div className="border border-[#202020] bg-black p-2.5">
+                <span className="block text-[#777777]">Metric status</span>
+                <span className="block text-white font-bold mt-1">{analysisMeta.datasetStatus}</span>
+              </div>
+              <div className="border border-[#202020] bg-black p-2.5">
+                <span className="block text-[#777777]">Runway status</span>
+                <span className="block text-white font-bold mt-1">{analysisMeta.runwayStatus}</span>
+              </div>
+            </div>
+          )}
+
           {/* Offline Fallback Clarification Banner */}
           {!analysisMeta?.isAiGenerated && (
             <div className="border border-[#333333] bg-black p-3.5 text-xs font-mono text-[#AAAAAA] flex items-start space-x-3">
@@ -422,7 +453,7 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess }) 
             {/* Wins */}
             <div className="space-y-3">
               <span className="text-[10px] font-mono uppercase tracking-widest text-white font-bold block border-b border-[#202020] pb-1">
-                Identified Cashflow Recovery
+                Review Candidates &amp; Confirmed Commitments
               </span>
               <div className="space-y-2">
                 {analysisInsights.top_actionable_wins?.map((win, idx) => (

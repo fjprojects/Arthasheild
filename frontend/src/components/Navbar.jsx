@@ -53,6 +53,7 @@ export default function Navbar({
           personas={personas}
           selectedId={selectedPersona?.id}
           onSelect={onSelectPersona}
+          hasConsented={hasConsented}
         />
 
         <SecurityCommandCenter

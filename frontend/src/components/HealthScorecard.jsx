@@ -15,20 +15,35 @@ import OdometerNumber from './effects/OdometerNumber';
 import { Card } from './ui/Card';
 import ProgressBar from './ui/ProgressBar';
 
-export default function HealthScorecard({ 
-  healthMetrics, 
-  safeToSpend, 
-  selectedPersona, 
-  detectedLeaks 
+export default function HealthScorecard({
+  healthMetrics,
+  safeToSpend,
+  selectedPersona,
+  detectedLeaks,
+  datasetSourceLabel = 'UNSPECIFIED',
+  reportingPeriod = 'PERIOD NOT AVAILABLE',
+  metricBasis = {},
+  leakageStatus = 'REVIEW',
 }) {
   if (!healthMetrics) return null;
 
-  const score = healthMetrics.health_score || 50;
-  const grade = healthMetrics.grade || 'B (Stable)';
-  const runway = healthMetrics.metrics?.runway_months || 1.0;
-  const dti = healthMetrics.metrics?.debt_to_income_ratio_pct || 25;
-  const savingsRate = healthMetrics.metrics?.savings_rate_pct || 15;
+  const score = healthMetrics.health_score;
+  const scoreUnavailable = score === null || score === undefined;
+  const grade = healthMetrics.grade || 'STATUS UNAVAILABLE';
+  const rawRunway = healthMetrics.metrics?.runway_months;
+  const runwayUnavailable =
+    healthMetrics.liquid_balance_known === false ||
+    rawRunway === null ||
+    rawRunway === undefined;
+  const runway = runwayUnavailable ? null : rawRunway;
+  const dti = healthMetrics.metrics?.debt_to_income_ratio_pct ?? null;
   const hasActiveLeaks = (detectedLeaks?.items_count || 0) > 0;
+  const sourceCaption = `SOURCE: ${datasetSourceLabel} · PERIOD: ${reportingPeriod}`;
+  const runwayCaption = runwayUnavailable
+    ? 'WITHHELD — NO VERIFIED BALANCE FOR THIS DATASET'
+    : metricBasis?.runway === 'PERSONA_SCENARIO_ESTIMATE'
+      ? 'ESTIMATED — DEMO PERSONA SCENARIO BALANCE'
+      : 'OBSERVED — VERIFIED BALANCE';
   // Imported statements carry no verified liquid balance, so Safe-to-Spend is
   // withheld server-side (INSUFFICIENT_DATA). Display that honestly instead of
   // implying a ₹0 allowance.
@@ -63,6 +78,9 @@ export default function HealthScorecard({
           
           <p className="text-xs font-mono text-[#AAAAAA] leading-relaxed max-w-xl m-0">
             {safeToSpend?.guidance || "Deterministic daily discretionary ceiling calculated after reserving pending EMIs, rent, and emergency floor."}
+          </p>
+          <p className="text-[9px] font-mono uppercase tracking-wider text-[#888888] m-0">
+            {sourceCaption} · STATUS: {safeToSpendUnavailable ? 'INSUFFICIENT DATA' : 'OBSERVED + DERIVED'}
           </p>
         </div>
 
@@ -126,8 +144,14 @@ export default function HealthScorecard({
             </div>
 
             <div className="text-3xl sm:text-4xl xl:text-5xl font-mono font-bold text-white py-4 tracking-tight flex items-baseline min-w-0 whitespace-nowrap">
-              <OdometerNumber value={score} />
-              <span className="text-xs text-[#AAAAAA] ml-1 font-mono font-normal">/100</span>
+              {scoreUnavailable ? (
+                <span className="text-xl">UNAVAILABLE</span>
+              ) : (
+                <>
+                  <OdometerNumber value={score} />
+                  <span className="text-xs text-[#AAAAAA] ml-1 font-mono font-normal">/100</span>
+                </>
+              )}
             </div>
 
             <div className="inline-flex border border-white bg-black text-white text-[9px] font-mono uppercase px-2 py-0.5 mb-3 w-fit font-bold tracking-widest">
@@ -136,11 +160,14 @@ export default function HealthScorecard({
           </div>
 
           <div>
-            <ProgressBar value={Math.min(100, Math.max(5, score))} />
+            <ProgressBar value={scoreUnavailable ? 0 : Math.min(100, Math.max(5, score))} />
             <p className="text-[9px] font-mono text-[#AAAAAA] mt-2 m-0 uppercase tracking-wider">
-              Financial resilience index
+              Financial resilience index · {metricBasis?.health_score === 'PERSONA_SCENARIO_ESTIMATE' ? 'SCENARIO ESTIMATE' : 'DERIVED FROM DATASET'}
             </p>
-        </div>
+            <p className="text-[8px] font-mono text-[#777777] mt-1 m-0 uppercase tracking-wider break-words">
+              {sourceCaption}
+            </p>
+          </div>
           </Card>
 
         {/* Card 2: Runway */}
@@ -158,21 +185,36 @@ export default function HealthScorecard({
             </div>
 
             <div className="text-3xl sm:text-4xl xl:text-5xl font-mono font-bold text-white py-4 tracking-tight flex items-baseline min-w-0 whitespace-nowrap">
-              <CrypticText text={String(runway)} triggerKey={runway} />
-              <span className="text-xs text-[#AAAAAA] ml-1 font-mono font-normal">MO</span>
+              {runwayUnavailable ? (
+                <span className="text-xl">UNAVAILABLE</span>
+              ) : (
+                <>
+                  <CrypticText text={String(runway)} triggerKey={runway} />
+                  <span className="text-xs text-[#AAAAAA] ml-1 font-mono font-normal">MO</span>
+                </>
+              )}
             </div>
 
             <div className="inline-flex border border-[#404040] bg-[#111111] text-[#AAAAAA] text-[9px] font-mono uppercase px-2 py-0.5 mb-3 w-fit tracking-wider">
-              {runway >= 3 ? 'Resilient' : runway >= 1 ? 'Moderate Buffer' : 'Critical Depletion'}
+              {runwayUnavailable
+                ? 'INSUFFICIENT DATA'
+                : runway >= 3
+                  ? 'Resilient'
+                  : runway >= 1
+                    ? 'Moderate Buffer'
+                    : 'Critical Depletion'}
             </div>
           </div>
 
           <div>
-            <ProgressBar value={Math.min(100, (runway / 6) * 100)} />
+            <ProgressBar value={runwayUnavailable ? 0 : Math.min(100, (runway / 6) * 100)} />
             <p className="text-[9px] font-mono text-[#AAAAAA] mt-2 m-0 uppercase tracking-wider">
               Liquid buffer at fixed burn
             </p>
-        </div>
+            <p className="text-[8px] font-mono text-[#777777] mt-1 m-0 uppercase tracking-wider break-words">
+              {runwayCaption}
+            </p>
+          </div>
           </Card>
 
         {/* Card 3: Debt Pressure with Rolling Odometer */}
@@ -190,21 +232,30 @@ export default function HealthScorecard({
             </div>
 
             <div className="text-3xl sm:text-4xl xl:text-5xl font-mono font-bold text-white py-4 tracking-tight flex items-baseline min-w-0 whitespace-nowrap">
-              <OdometerNumber value={dti} suffix="%" />
-              <span className="text-xs text-[#AAAAAA] ml-1 font-mono font-normal">DTI</span>
+              {dti === null ? (
+                <span className="text-xl">UNAVAILABLE</span>
+              ) : (
+                <>
+                  <OdometerNumber value={dti} suffix="%" />
+                  <span className="text-xs text-[#AAAAAA] ml-1 font-mono font-normal">DTI</span>
+                </>
+              )}
             </div>
 
             <div className="inline-flex border border-[#404040] bg-[#111111] text-[#AAAAAA] text-[9px] font-mono uppercase px-2 py-0.5 mb-3 w-fit tracking-wider">
-              {dti <= 30 ? 'Safe Ratio' : 'High Obligation'}
+              {dti === null ? 'INSUFFICIENT DATA' : dti <= 30 ? 'Safe Ratio' : 'High Obligation'}
             </div>
           </div>
 
           <div>
-            <ProgressBar value={Math.min(100, dti)} />
+            <ProgressBar value={dti === null ? 0 : Math.min(100, dti)} />
             <p className="text-[9px] font-mono text-[#AAAAAA] mt-2 m-0 uppercase tracking-wider">
               Committed to active loans & rent
             </p>
-        </div>
+            <p className="text-[8px] font-mono text-[#777777] mt-1 m-0 uppercase tracking-wider break-words">
+              {sourceCaption}
+            </p>
+          </div>
           </Card>
 
         {/* Card 4: Silent Leakage with Monochrome Warning Breathing Glow */}
@@ -218,7 +269,7 @@ export default function HealthScorecard({
         >
           <div>
             <div className="text-[10px] uppercase text-[#AAAAAA] flex items-center justify-between pb-3 border-b border-[#202020] font-mono">
-              <span className="tracking-wider">Silent Leakage</span>
+              <span className="tracking-wider">Recurring Review Amount</span>
               <Flame className="w-4 h-4 text-white" />
             </div>
 
@@ -231,16 +282,21 @@ export default function HealthScorecard({
             </div>
 
             <div className="inline-flex border border-white bg-black text-white text-[9px] font-mono uppercase px-2 py-0.5 mb-3 w-fit font-bold tracking-widest">
-              {detectedLeaks?.items_count || 0} Drains Flagged
+              {detectedLeaks?.items_count || 0} {leakageStatus === 'SCENARIO_UNVERIFIED' ? 'Scenario Items' : 'Payments to Review'}
             </div>
           </div>
 
           <div>
             <ProgressBar value={Math.min(100, ((detectedLeaks?.total_monthly_leakage || 0) / 10000) * 100)} />
             <p className="text-[9px] font-mono text-[#AAAAAA] mt-2 m-0 uppercase tracking-wider">
-              Dormant subscriptions & fees
+              {leakageStatus === 'SCENARIO_UNVERIFIED'
+                ? 'Static scenario reference — unverified, not savings'
+                : 'Evidence-based recurring payments — review before treating as savings'}
             </p>
-        </div>
+            <p className="text-[8px] font-mono text-[#777777] mt-1 m-0 uppercase tracking-wider break-words">
+              {sourceCaption} · STATUS: {leakageStatus === 'SCENARIO_UNVERIFIED' ? 'UNVERIFIED SCENARIO' : 'REVIEW CANDIDATES'}
+            </p>
+          </div>
           </Card>
 
       </div>

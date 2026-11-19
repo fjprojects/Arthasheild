@@ -17,14 +17,41 @@ from data_processor.transfers import (
 # Helper: simple keyword-based categorization
 # ---------------------------------------------------------------------------
 _CATEGORY_KEYWORDS = {
-    'food': ['swiggy', 'zomato', 'restaurant', 'cafe', 'food', 'meal', 'pizza', 'burger', 'dine', 'biryani', 'tiffin', 'dhaba'],
-    'shopping': ['amazon', 'flipkart', 'myntra', 'shopping', 'store', 'retail', 'clothing', 'apparel'],
-    'travel': ['airline', 'flight', 'uber', 'ola', 'taxi', 'rail', 'train', 'hotel', 'booking'],
-    'bills': ['electricity', 'water', 'gas', 'utility', 'bill', 'telecom', 'mobile', 'internet'],
+    'food': [
+        'swiggy', 'zomato', 'restaurant', 'cafe', 'food', 'meal', 'pizza',
+        'burger', 'dine', 'biryani', 'tiffin', 'dhaba',
+        'zepto', 'blinkit', 'groceries', 'grocery', 'chaipoint', 'chai point',
+        'bigbasket', 'dunzo', 'instamart',
+    ],
+    'shopping': [
+        'flipkart', 'myntra', 'shopping', 'store', 'retail', 'clothing',
+        'apparel', 'meesho', 'ajio', 'nykaa',
+    ],
+    'travel': [
+        'airline', 'flight', 'uber', 'ola', 'taxi', 'rail', 'train', 'hotel',
+        'booking', 'makemytrip', 'irctc', 'goibibo', 'indigo',
+    ],
+    'bills': [
+        'electricity', 'water', 'gas', 'utility', 'bill', 'telecom', 'mobile',
+        'internet', 'broadband', 'postpaid', 'maintenance',
+    ],
+    # Rent is a distinct financial category, not a generic utility bill. It is
+    # placed before ``bills`` so keyword fallback keeps the two separate.
+    'rent_housing': [
+        'rent', 'landlord', 'apartment', 'housing', 'tenancy', 'to-let',
+        'house rent', 'flat rent', 'room rent', 'society rent',
+    ],
     'salary': ['salary', 'payroll', 'remuneration', 'salary credited', 'salary credit'],
     'emi': ['emi', 'loan', 'mortgage', 'installment'],
-    'subscriptions': ['netflix', 'spotify', 'prime', 'subscription', 'membership', 'saas', 'gym'],
-    'healthcare': ['hospital', 'clinic', 'pharmacy', 'medicine', 'doctor', 'lab', 'health'],
+    'subscriptions': [
+        'netflix', 'spotify', 'prime', 'subscription', 'membership', 'saas',
+        'gym', 'adobe', 'figma', 'openai', 'chatgpt', 'github', 'copilot',
+        'aws', 'cloud', 'hotstar', 'youtube premium', 'notion', 'dropbox',
+    ],
+    'healthcare': [
+        'hospital', 'clinic', 'pharmacy', 'medicine', 'doctor', 'lab',
+        'health', 'apollo', 'practo', '1mg', 'pharmeasy',
+    ],
 }
 
 _REFUND_STRIP_TERMS = {
@@ -35,7 +62,8 @@ _REFUND_STRIP_TERMS = {
     'transaction', 'transfer', 'tfr', 'supermarket', 'delivery', 'orders',
     'general_refund', 'merchant', 'ref', 'reference', 'ord',
     # Category terms -- matching solely on broad categories is strictly forbidden
-    'shopping', 'food', 'travel', 'bills', 'healthcare', 'subscriptions', 'emi', 'salary', 'other'
+    'shopping', 'food', 'travel', 'bills', 'rent housing', 'rent_housing',
+    'healthcare', 'subscriptions', 'emi', 'salary', 'other'
 }
 
 # ---------------------------------------------------------------------------
@@ -551,10 +579,204 @@ def classify_debit(merchant: str, description: str = "") -> Dict[str, Any]:
     return {
         "is_transfer": False,
         "category": cat,
-        "label": cat.capitalize(),
+        "label": category_display_name(cat),
         "transfer_confidence": transfer['confidence'],
         "transfer_evidence": transfer['evidence'],
     }
+
+
+# ---------------------------------------------------------------------------
+# Authoritative category resolution
+# ---------------------------------------------------------------------------
+# A stored, meaningful category is evidence of how the user (or a verified
+# import) labelled a transaction. Keyword inference is only a fallback for
+# generic placeholders. Canonical keys keep Rent & Housing separate from bills
+# without rewriting the user's precise label at the response boundary.
+_GENERIC_CATEGORY_KEYS = {
+    '', 'general', 'uncategorized', 'uncategorised', 'unclassified',
+    'other', 'unknown', 'none',
+}
+
+_CATEGORY_ALIASES = {
+    'rent': 'rent_housing',
+    'rent & housing': 'rent_housing',
+    'rent and housing': 'rent_housing',
+    'house rent': 'rent_housing',
+    'housing': 'rent_housing',
+    'landlord': 'rent_housing',
+    'bill': 'bills',
+    'bill & utilities': 'bills',
+    'bills & utilities': 'bills',
+    'utilities': 'bills',
+    'emi': 'emi',
+    'emi/loan': 'emi',
+    'emi_or_loan': 'emi',
+    'loan emi': 'emi',
+    'bnpl loan': 'emi',
+    'salary': 'salary',
+    'payroll': 'salary',
+    'freelance income': 'freelance_income',
+    'internship stipend': 'internship_stipend',
+    'allowance': 'allowance',
+    'ai tools': 'subscriptions',
+    'developer tools': 'subscriptions',
+    'software subscriptions': 'subscriptions',
+    'subscription': 'subscriptions',
+    'health & fitness': 'healthcare',
+    'fuel & commute': 'travel',
+    'food & dining': 'food',
+    'food delivery': 'food',
+    'dining out': 'food',
+    'groceries': 'food',
+    'quick commerce': 'shopping',
+    'quick snacks': 'food',
+    'books & stationery': 'shopping',
+    'education': 'other',
+    'entertainment': 'subscriptions',
+    'bank fees & fines': 'fees',
+}
+
+_CATEGORY_DISPLAY_NAMES = {
+    'rent_housing': 'Rent & Housing',
+    'subscriptions': 'Subscriptions',
+    'healthcare': 'Healthcare',
+    'freelance_income': 'Freelance Income',
+    'internship_stipend': 'Internship Stipend',
+    'emi': 'EMI / Loan',
+    'unclassified_credit': 'Unclassified Credit',
+}
+
+_EARNED_INCOME_CATEGORY_KEYS = {
+    'salary', 'freelance_income', 'internship_stipend', 'allowance',
+}
+
+
+def canonical_category_key(value: Any) -> str:
+    """Normalize a stored category into a stable, comparable key."""
+    text = str(value or '').strip().lower().replace('_', ' ')
+    text = re.sub(r'\s+', ' ', text)
+    if not text:
+        return ''
+    if text in _CATEGORY_ALIASES:
+        return _CATEGORY_ALIASES[text]
+    return text.replace(' ', '_')
+
+
+def category_display_name(key: str) -> str:
+    """Return the canonical human-readable label for a category key.
+
+    Existing engine categories are intentionally lowercase for machine
+    consumers, while canonical finance categories (notably rent) receive a
+    stable human-readable label. Rent must be handled before the generic
+    keyword-key check because it is also a classifier key.
+    """
+    if not key:
+        return 'Uncategorized'
+    if key == 'rent_housing':
+        return 'Rent & Housing'
+    if key in set(_CATEGORY_KEYWORDS) | {'refund', 'transfer', 'other'}:
+        return key
+    return _CATEGORY_DISPLAY_NAMES.get(key, key.replace('_', ' ').title())
+
+
+def _stored_category_key(tx) -> str:
+    return canonical_category_key(getattr(tx, 'category', ''))
+
+
+def _is_generic_category_key(key: str) -> bool:
+    return key in _GENERIC_CATEGORY_KEYS
+
+
+def resolve_transaction_category(tx) -> str:
+    """Resolve one canonical category for a transaction.
+
+    Precedence:
+    1. a meaningful stored category (including a human correction),
+    2. a deterministic classifier for generic/empty stored categories.
+
+    This prevents a keyword guess from overwriting a verified label such as
+    ``Rent & Housing`` or ``Freelance Income`` while still giving uncategorised
+    imports a useful category.
+    """
+    stored_key = _stored_category_key(tx)
+    if stored_key and not _is_generic_category_key(stored_key):
+        return stored_key
+
+    if getattr(tx, 'transaction_type', '') == 'CREDIT':
+        return classify_credit(getattr(tx, 'normalized_merchant', ''))['category']
+    return classify_debit(getattr(tx, 'normalized_merchant', ''))['category']
+
+
+def resolve_credit_classification(tx) -> Dict[str, Any]:
+    """Classify a credit, honouring a stored meaningful category.
+
+    Narration rules remain the default, but a stored verified category such as
+    ``Freelance Income`` is not demoted to ``unclassified_credit`` merely
+    because a short narration lacks a salary keyword.
+    """
+    info = dict(classify_credit(getattr(tx, 'normalized_merchant', '')))
+    stored_key = _stored_category_key(tx)
+    has_meaningful_stored = bool(stored_key and not _is_generic_category_key(stored_key))
+    is_user_correction = (
+        'USER_CORRECTION' in str(getattr(tx, 'risk_note', '') or '').upper()
+    )
+    info['category_source'] = (
+        'USER_CORRECTION' if is_user_correction
+        else 'STORED_CATEGORY' if has_meaningful_stored
+        else 'NARRATION'
+    )
+
+    # A verified label wins over a keyword guess, even when both are
+    # meaningful. Narration remains the default only for generic/empty labels.
+    if has_meaningful_stored:
+        info['category'] = stored_key
+        info['label'] = category_display_name(stored_key)
+
+    if stored_key in _EARNED_INCOME_CATEGORY_KEYS and (
+        info['credit_type'] == 'unclassified' or is_user_correction
+    ):
+        info.update({
+            'credit_type': 'earned_income',
+            'is_earned_income': True,
+            'is_operating_income': True,
+            'category': stored_key,
+            'associated_category': 'earned_income',
+            'label': category_display_name(stored_key),
+        })
+    elif stored_key == 'transfer' and (
+        info['credit_type'] == 'unclassified' or is_user_correction
+    ):
+        info.update({
+            'credit_type': 'transfer',
+            'is_earned_income': False,
+            'is_operating_income': False,
+            'category': 'transfer',
+            'associated_category': 'internal_transfer',
+            'label': 'Internal Account Transfer',
+        })
+    elif stored_key == 'refund' and (
+        info['credit_type'] == 'unclassified' or is_user_correction
+    ):
+        info.update({
+            'credit_type': 'refund',
+            'is_earned_income': False,
+            'is_operating_income': False,
+            'category': 'refund',
+            'associated_category': 'general_refund',
+            'label': 'Merchant Refund / Reversal',
+        })
+    elif stored_key == 'reimbursement' and (
+        info['credit_type'] == 'unclassified' or is_user_correction
+    ):
+        info.update({
+            'credit_type': 'reimbursement',
+            'is_earned_income': False,
+            'is_operating_income': False,
+            'category': 'reimbursement',
+            'associated_category': 'expense_reimbursement',
+            'label': 'Expense Reimbursement',
+        })
+    return info
 
 
 def _categorize(normalized_merchant: str, transaction_type: str = 'DEBIT') -> str:
@@ -578,25 +800,34 @@ def _categorize(normalized_merchant: str, transaction_type: str = 'DEBIT') -> st
 # 1. Transaction Categorization
 # ---------------------------------------------------------------------------
 def categorize_transactions(session_id: str, include_persona: bool = False) -> List[Dict[str, Any]]:
-    qs = Transaction.objects.filter(session_id=session_id)
-    if not include_persona:
-        qs = qs.filter(source_type='import')
+    source_type = (
+        Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+    )
+    qs = Transaction.objects.filter(session_id=session_id, source_type=source_type)
     result = []
     for tx in qs:
+        category = resolve_transaction_category(tx)
         if tx.transaction_type == 'CREDIT':
-            c_info = classify_credit(tx.normalized_merchant)
-            category = c_info['category']
+            c_info = resolve_credit_classification(tx)
             credit_type = c_info['credit_type']
             is_earned = c_info['is_earned_income']
             is_transfer = False
             associated_cat = c_info.get('associated_category')
+            category_source = c_info.get('category_source', 'NARRATION')
         else:
             d_info = classify_debit(tx.normalized_merchant)
-            category = d_info['category']
             credit_type = None
             is_earned = False
             is_transfer = d_info['is_transfer']
             associated_cat = None
+            stored_key = _stored_category_key(tx)
+            category_source = (
+                'USER_CORRECTION'
+                if 'USER_CORRECTION' in str(getattr(tx, 'risk_note', '') or '').upper()
+                else 'STORED_CATEGORY'
+                if stored_key and not _is_generic_category_key(stored_key)
+                else 'INFERRED_KEYWORD'
+            )
 
         result.append({
             'id': str(tx.id),
@@ -604,7 +835,9 @@ def categorize_transactions(session_id: str, include_persona: bool = False) -> L
             'amount': str(tx.amount),
             'type': tx.transaction_type,
             'merchant': _display_counterparty(tx.normalized_merchant),
-            'category': category,
+            'category': category_display_name(category),
+            'category_key': category,
+            'category_source': category_source,
             'credit_type': credit_type,
             'is_earned_income': is_earned,
             'is_transfer': is_transfer,
@@ -623,9 +856,15 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
         end = date(year + 1, 1, 1)
     else:
         end = date(year, month + 1, 1)
-    qs = Transaction.objects.filter(session_id=session_id, transaction_date__gte=start, transaction_date__lt=end)
-    if not include_persona:
-        qs = qs.filter(source_type='import')
+    source_type = (
+        Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+    )
+    qs = Transaction.objects.filter(
+        session_id=session_id,
+        source_type=source_type,
+        transaction_date__gte=start,
+        transaction_date__lt=end,
+    )
 
     credit_qs = qs.filter(transaction_type='CREDIT')
     debit_qs = qs.filter(transaction_type='DEBIT')
@@ -645,7 +884,7 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
     refund_tx_list = []
 
     for tx in credit_qs:
-        info = classify_credit(tx.normalized_merchant)
+        info = resolve_credit_classification(tx)
         ctype = info['credit_type']
         amt = tx.amount
 
@@ -676,13 +915,14 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
     cat_spend = defaultdict(Decimal)
 
     for tx in debit_qs:
-        d_info = classify_debit(tx.normalized_merchant)
         amt = tx.amount
-        if d_info['is_transfer']:
+        is_user_transfer = canonical_category_key(tx.category) == 'transfer'
+        d_info = classify_debit(tx.normalized_merchant)
+        if is_user_transfer or d_info['is_transfer']:
             debit_transfers += amt
             cat_spend['transfer'] += amt
         else:
-            cat = d_info['category']
+            cat = resolve_transaction_category(tx)
             cat_spend[cat] += amt
 
     gross_living_expenses = gross_debits - debit_transfers
@@ -693,16 +933,15 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
     lookback_start = start - timedelta(days=180)
     all_candidate_debits_qs = Transaction.objects.filter(
         session_id=session_id,
+        source_type=source_type,
         transaction_type='DEBIT',
         transaction_date__gte=lookback_start,
         transaction_date__lt=end
     )
-    if not include_persona:
-        all_candidate_debits_qs = all_candidate_debits_qs.filter(source_type='import')
 
     valid_candidate_debits = [
         d for d in all_candidate_debits_qs
-        if not classify_debit(d.normalized_merchant)['is_transfer']
+        if not ((d.category and d.category.lower() == 'transfer') or classify_debit(d.normalized_merchant)['is_transfer'])
     ]
 
     debit_capacity = {str(d.id): d.amount for d in valid_candidate_debits}
@@ -1819,11 +2058,14 @@ def classify_recurring_payment(merchant: str, category: str = "") -> str:
     for kw in _OTHER_RECURRING_KEYWORDS:
         if _matches(kw):
             return PAYMENT_TYPE_OTHER
-    if category.lower() in ('subscriptions', 'subscription'):
+    category_key = canonical_category_key(category)
+    if category_key == 'rent_housing':
+        return PAYMENT_TYPE_RENT
+    if category_key in ('subscriptions', 'subscription'):
         return PAYMENT_TYPE_SUBSCRIPTION
-    if category.lower() in ('bills', 'bill'):
+    if category_key in ('bills', 'bill'):
         return PAYMENT_TYPE_UTILITY
-    if category.lower() == 'emi':
+    if category_key == 'emi':
         return PAYMENT_TYPE_EMI
     return PAYMENT_TYPE_UNKNOWN
 
@@ -2031,15 +2273,22 @@ def detect_subscriptions(
     - Computes calendar-aware next payment dates (handles leap years and month lengths).
     - Withholds unsupported projected annual costs for irregular cadences.
     """
-    qs = Transaction.objects.filter(session_id=session_id, transaction_type='DEBIT')
-    if not include_persona:
-        qs = qs.filter(source_type='import')
+    source_type = (
+        Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+    )
+    qs = Transaction.objects.filter(
+        session_id=session_id,
+        source_type=source_type,
+        transaction_type='DEBIT',
+    )
     all_debits = list(qs.order_by('transaction_date', 'created_at'))
 
     # Group eligible debits
     groups = defaultdict(list)
     for tx in all_debits:
-        # Exclude identified own-account transfers
+        # Exclude identified own-account transfers (both model-classified and user-corrected)
+        if canonical_category_key(tx.category) == 'transfer':
+            continue
         debit_info = classify_debit(tx.normalized_merchant)
         if debit_info.get('is_transfer'):
             continue
@@ -2077,12 +2326,19 @@ def detect_subscriptions(
         count = len(deduped_items)
         if count == 0:
             continue
+        # Real transaction IDs for this recurrence. Downstream engines must use
+        # these instead of the legacy boolean ``candidates`` flag so evidence
+        # can be validated against the active session ledger.
+        candidate_transaction_ids = [str(t.id) for t in deduped_items]
 
         latest_tx = deduped_items[-1]
         _, canonical_merchant, _ = get_recurring_merchant_key(latest_tx.normalized_merchant)
         display_merchant = _sanitize_counterparty_name(latest_tx.normalized_merchant, canonical_merchant)
         counterparty_class = classify_upi_counterparty(latest_tx.normalized_merchant)
-        payment_type = classify_recurring_payment(latest_tx.normalized_merchant, getattr(latest_tx, 'category', ''))
+        payment_type = classify_recurring_payment(
+            latest_tx.normalized_merchant,
+            category_display_name(resolve_transaction_category(latest_tx)),
+        )
         if counterparty_class == COUNTERPARTY_UNCERTAIN:
             # Conservative handling: an ambiguous UPI handle must not be presented as a
             # commercial subscription or a confirmed recurring commitment.
@@ -2330,7 +2586,10 @@ def detect_subscriptions(
             # Backward compatibility fields
             'monthly_estimate': est_monthly_str,
             'yearly_estimate': est_annual_str,
+            # Backward-compatible flag retained for existing UI/tests. Actual
+            # evidence is the validated ID list below.
             'candidates': candidates,
+            'candidate_transaction_ids': candidate_transaction_ids,
         })
 
     # Sort primarily by estimated_monthly_cost or observed_period_average descending
@@ -2341,9 +2600,14 @@ def detect_subscriptions(
 # 4. Unusual Spending Detector
 # ---------------------------------------------------------------------------
 def detect_unusual_spending(session_id: str, include_persona: bool = False) -> List[Dict[str, Any]]:
-    qs = Transaction.objects.filter(session_id=session_id, transaction_type='DEBIT')
-    if not include_persona:
-        qs = qs.filter(source_type='import')
+    source_type = (
+        Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+    )
+    qs = Transaction.objects.filter(
+        session_id=session_id,
+        source_type=source_type,
+        transaction_type='DEBIT',
+    )
     tx_list = list(qs)
 
     # Task 23: the duplicate scan used to run one EXISTS query per transaction
@@ -2439,6 +2703,20 @@ def _derive_statement_period(transactions):
     return start_date, end_date, year, month
 
 
+def _resolve_display_category(t) -> str:
+    """Dynamically resolve a transaction's display category.
+
+    If the persisted ``t.category`` is ``Uncategorized`` or empty, the
+    classification engine is invoked on the normalized merchant so that
+    imported transactions receive a meaningful label even when the import
+    pipeline stored a generic placeholder.
+
+    The result is formatted for human display (title-case, underscores
+    replaced by spaces).
+    """
+    return category_display_name(resolve_transaction_category(t))
+
+
 def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
     from analytics.services import AnalyticsEngine
     import calendar as _cal
@@ -2475,6 +2753,9 @@ def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
                 pass
 
     monthly_leakage = Decimal('0')
+    probable_review_amount = Decimal('0')
+    verified_leak_tx_ids = set()
+    recurring_review_tx_ids = set()
     for s in subs:
         # A potentially avoidable recurring charge: a confirmed subscription
         # commitment. A weak detection or a repeated purchase is never presented
@@ -2484,6 +2765,17 @@ def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
                 monthly_leakage += Decimal(str(s.get('estimated_monthly_cost') or '0'))
             except Exception:
                 pass
+            for tx_id in s.get('candidate_transaction_ids') or []:
+                if isinstance(tx_id, str):
+                    verified_leak_tx_ids.add(tx_id)
+        elif s.get('confidence') == RECURRING_PROBABLE:
+            try:
+                probable_review_amount += Decimal(str(s.get('estimated_monthly_cost') or '0'))
+            except Exception:
+                pass
+            for tx_id in s.get('candidate_transaction_ids') or []:
+                if isinstance(tx_id, str):
+                    recurring_review_tx_ids.add(tx_id)
 
     days_covered = (end_date - start_date).days + 1 if start_date and end_date else 0
     unique_days = len(set(t.transaction_date for t in txs))
@@ -2555,7 +2847,7 @@ def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
     for t in txs:
         # An own-account transfer keeps its place in the ledger but is labelled
         # as what it is, instead of appearing as an ordinary counterparty.
-        is_internal_transfer = classify_debit(t.normalized_merchant)['is_transfer']
+        is_internal_transfer = (t.category and t.category.lower() == 'transfer') or classify_debit(t.normalized_merchant)['is_transfer']
         merchant = (
             INTERNAL_TRANSFER_LABEL
             if is_internal_transfer
@@ -2568,9 +2860,12 @@ def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
             'merchant': merchant,
             'amount': str(t.amount),
             'type': t.transaction_type,
-            'category': t.category or 'Uncategorized',
+            'category': _resolve_display_category(t),
             'is_recurring': t.is_recurring,
-            'leak_flag': t.is_leak,
+            # Evidence-derived: a static persona/import flag is never treated
+            # as proof that money is recoverable.
+            'leak_flag': str(t.id) in verified_leak_tx_ids,
+            'recurring_review_flag': str(t.id) in recurring_review_tx_ids,
             'source_type': t.source_type,
             'is_internal_transfer': is_internal_transfer,
         })
@@ -2590,6 +2885,7 @@ def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
     return {
         'source': 'IMPORTED_STATEMENT',
         'has_imported_data': True,
+        'leakage_basis': 'EVIDENCE_BASED_RECURRING_DETECTION',
         'data_sufficient': True,
         'session_id': session_id,
         'statement_period': {
@@ -2601,7 +2897,18 @@ def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
         },
         'data_coverage': coverage,
         'budget': budget,
-        'health_metrics': {**health, 'liquid_balance_known': liquid_balance_known},
+        'health_metrics': {
+            **health,
+            'liquid_balance_known': liquid_balance_known,
+            # A deterministic score computed without a verified balance is an
+            # estimate, and runway must not be presented as an observed value.
+            'metric_basis': {
+                'income': 'OBSERVED_FROM_IMPORTED_TRANSACTIONS',
+                'expenses': 'OBSERVED_FROM_IMPORTED_TRANSACTIONS',
+                'runway': 'WITHHELD_BALANCE_UNAVAILABLE' if not liquid_balance_known else 'OBSERVED',
+                'health_score': 'ESTIMATED_BALANCE_UNAVAILABLE' if not liquid_balance_known else 'OBSERVED',
+            },
+        },
         'safe_to_spend': safe,
         'safe_to_spend_status': safe_to_spend_status,
         'safe_to_spend_reason': safe_to_spend_reason,
@@ -2610,7 +2917,9 @@ def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
             'monthly_expenses': str(monthly_expenses.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             'confirmed_commitments': str(confirmed_commitments.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             'monthly_leakage': str(monthly_leakage.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-            'confirmed_recurring_count': sum(1 for s in subs if s.get('confidence') == RECURRING_CONFIRMED),
+            'confirmed_recurring_count': sum(1 for s in subs if s.get('is_financial_commitment')),
+            'probable_review_count': sum(1 for s in subs if s.get('confidence') == RECURRING_PROBABLE),
+            'probable_review_amount': str(probable_review_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             'liquid_balance': str(liquid_balance.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)) if liquid_balance_known else None,
             'liquid_balance_known': liquid_balance_known,
         },
@@ -2618,3 +2927,654 @@ def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
         'transaction_count': len(txs),
     }
 
+
+def compute_dataset_financial_metrics(
+    session_id: str,
+    include_persona: bool = False,
+) -> Dict[str, Any]:
+    """Derive AI-facing metrics from exactly one selected dataset.
+
+    The requested source is validated against the active session: a persona
+    request with no persona rows, or an imported request with no imported rows,
+    returns INSUFFICIENT_DATA. It never silently substitutes the other source
+    or a persona-created snapshot.
+
+    Runway is only produced when a balance appropriate to the selected source is
+    available. Imported statements have no verified balance in this schema, so
+    their runway is withheld rather than borrowed from a persona snapshot.
+    """
+    from analytics.services import AnalyticsEngine
+
+    source_label = 'PERSONA_SCENARIO' if include_persona else 'IMPORTED_STATEMENT'
+    source_type = Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+    qs = Transaction.objects.filter(session_id=session_id, source_type=source_type)
+    txs = list(qs.order_by('transaction_date'))
+    base = {
+        'status': 'INSUFFICIENT_DATA',
+        'data_source': source_label,
+        'source_type': source_type,
+        'dataset_transaction_count': len(txs),
+        'reporting_period': None,
+        'monthly_income': 0.0,
+        'monthly_expenses': 0.0,
+        'health_score': None,
+        'health_grade': None,
+        'emergency_runway_months': None,
+        'runway_status': 'INSUFFICIENT_DATA',
+        'balance_source': None,
+        'recurring_commitments': {
+            'monthly_commitments': 0.0,
+            'monthly_leakage': 0.0,
+            'probable_review_amount': 0.0,
+            'confirmed_commitment_count': 0,
+            'recurring_pattern_count': 0,
+            'review_candidate_count': 0,
+        },
+        'metric_basis': {
+            'income': 'OBSERVED_FROM_SELECTED_DATASET',
+            'expenses': 'OBSERVED_FROM_SELECTED_DATASET',
+            'recurring': 'EVIDENCE_BASED_DETECTION',
+            'runway': 'WITHHELD',
+        },
+    }
+    if not txs:
+        base['insufficient_reason'] = (
+            'NO_PERSONA_TRANSACTIONS_IN_SELECTED_DATASET'
+            if include_persona else 'NO_IMPORTED_TRANSACTIONS_IN_SELECTED_DATASET'
+        )
+        return base
+
+    start_date, end_date, year, month = _derive_statement_period(txs)
+    budget = monthly_budget(session_id, year, month, include_persona=include_persona)
+    subs = detect_subscriptions(session_id, include_persona=include_persona)
+
+    monthly_income = _to_dataset_decimal(budget.get('operating_income') or budget.get('income'))
+    monthly_expenses = _to_dataset_decimal(
+        budget.get('net_living_expenses') or budget.get('expenses')
+    )
+    commitments = Decimal('0')
+    leakage = Decimal('0')
+    probable_review = Decimal('0')
+    confirmed_count = 0
+    pattern_count = 0
+    review_count = 0
+    for entry in subs:
+        estimated = _to_dataset_decimal(
+            entry.get('estimated_monthly_cost') or entry.get('observed_period_average')
+        )
+        if entry.get('is_financial_commitment'):
+            commitments += estimated
+            confirmed_count += 1
+        elif entry.get('confidence') == RECURRING_PROBABLE:
+            probable_review += estimated
+            review_count += 1
+        else:
+            pattern_count += 1
+        if entry.get('is_potential_leakage'):
+            leakage += estimated
+
+    balance = None
+    balance_source = None
+    fixed_commitments = commitments
+    if include_persona:
+        snapshot = (
+            FinancialSnapshot.objects.filter(session_id=session_id)
+            .order_by('-created_at')
+            .first()
+        )
+        if snapshot and snapshot.liquid_balance > 0:
+            balance = Decimal(str(snapshot.liquid_balance))
+            balance_source = 'PERSONA_SCENARIO_SNAPSHOT'
+            if snapshot.fixed_commitments > 0:
+                fixed_commitments = Decimal(str(snapshot.fixed_commitments))
+
+    health = None
+    health_grade = None
+    if balance is not None:
+        health = AnalyticsEngine.calculate_health_score(
+            monthly_income=float(monthly_income),
+            monthly_expenses=float(monthly_expenses),
+            liquid_balance=float(balance),
+            fixed_commitments=float(fixed_commitments),
+        )
+        health_grade = health.get('grade')
+
+    runway = None
+    runway_status = 'INSUFFICIENT_DATA'
+    if balance is not None and monthly_income > 0 and monthly_expenses >= 0:
+        burn = monthly_expenses if monthly_expenses > 0 else fixed_commitments
+        if burn > 0:
+            runway = float((balance / burn).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+            runway_status = 'AVAILABLE'
+
+    base.update({
+        'status': 'AVAILABLE',
+        'reporting_period': {
+            'start_date': start_date.isoformat() if start_date else None,
+            'end_date': end_date.isoformat() if end_date else None,
+            'label': (
+                f"{_cal_month_name(month)} {year}"
+                if month and year else None
+            ),
+        },
+        'monthly_income': float(monthly_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        'monthly_expenses': float(monthly_expenses.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        'health_score': health.get('health_score') if health else None,
+        'health_grade': health_grade,
+        'emergency_runway_months': runway,
+        'runway_status': runway_status,
+        'balance_source': balance_source,
+        'recurring_commitments': {
+            'monthly_commitments': float(commitments.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'monthly_leakage': float(leakage.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'probable_review_amount': float(probable_review.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'confirmed_commitment_count': confirmed_count,
+            'recurring_pattern_count': pattern_count,
+            'review_candidate_count': review_count,
+        },
+        'metric_basis': {
+            'income': 'OBSERVED_FROM_SELECTED_DATASET',
+            'expenses': 'OBSERVED_FROM_SELECTED_DATASET',
+            'recurring': 'EVIDENCE_BASED_DETECTION',
+            'runway': 'PERSONA_SCENARIO_ESTIMATE' if include_persona and runway is not None else 'WITHHELD',
+            'health_score': 'PERSONA_SCENARIO_ESTIMATE' if include_persona and health else None,
+        },
+    })
+    if runway is None:
+        base['insufficient_reason'] = 'BALANCE_UNAVAILABLE_FOR_SELECTED_DATASET'
+    return base
+
+
+def _to_dataset_decimal(value: Any) -> Decimal:
+    try:
+        return Decimal(str(value or '0'))
+    except Exception:
+        return Decimal('0')
+
+
+def _cal_month_name(month: Optional[int]) -> Optional[str]:
+    if not month:
+        return None
+    import calendar as _cal
+    return _cal.month_name[month]
+
+
+# ---------------------------------------------------------------------------
+# Evidence-Based Financial Insights Briefing
+# ---------------------------------------------------------------------------
+# This is ArthaShield's core differentiator. Every insight is backed by
+# deterministic calculations from the existing financial engine. The AI
+# layer may explain results but never invents financial figures.
+#
+# Insight structure:
+#   id        — stable identifier for the insight type + context
+#   type      — one of the _INSIGHT_TYPES below
+#   severity  — CRITICAL / HIGH / MEDIUM / LOW / INFO
+#   finding   — one-line plain-English statement of what happened
+#   evidence  — concrete numbers and transaction references
+#   explanation — why this was detected (the rule or calculation)
+#   action    — actionable suggestion for the user
+#   confidence — always 'VERIFIED' (deterministic calculation)
+# ---------------------------------------------------------------------------
+
+_SEVERITY_ORDER = {
+    'CRITICAL': 0,
+    'HIGH': 1,
+    'MEDIUM': 2,
+    'LOW': 3,
+    'INFO': 4,
+}
+
+_INSIGHT_TYPES = [
+    'BUDGET_STATUS',
+    'TOP_EXPENSE',
+    'SPENDING_SPIKE',
+    'RECURRING_COMMITMENT',
+    'POTENTIAL_LEAK',
+    'UNUSUAL_TRANSACTION',
+    'INCOME_ANALYSIS',
+    'REFUND_WATCH',
+]
+
+
+def generate_evidence_briefing(session_id: str, include_persona: bool = False) -> Dict[str, Any]:
+    """
+    Synthesise a structured, evidence-based financial briefing from existing
+    deterministic calculations. No new computations are invented — every
+    insight wraps an existing engine output with human-readable context.
+
+    Returns:
+        dict with keys: insights, reporting_period, generated_at,
+        data_source, insight_count, has_data
+    """
+    import calendar as _cal
+
+    # ----- Resolve transactions & period ---------------------------------
+    qs = Transaction.objects.filter(session_id=session_id)
+    if not include_persona:
+        qs = qs.filter(source_type='import')
+    txs = list(qs.order_by('transaction_date'))
+
+    if not txs:
+        return {
+            'insights': [],
+            'reporting_period': None,
+            'generated_at': datetime.now().isoformat(),
+            'data_source': 'PERSONA' if include_persona else 'IMPORTED_STATEMENT',
+            'insight_count': 0,
+            'has_data': False,
+        }
+
+    start_date, end_date, year, month = _derive_statement_period(txs)
+    period_label = f"{_cal.month_name[month]} {year}" if year and month else "Unknown Period"
+
+    # ----- Call existing engines -----------------------------------------
+    budget = monthly_budget(session_id, year, month, include_persona)
+
+    try:
+        subs = detect_subscriptions(session_id, include_persona)
+    except Exception:
+        subs = []
+
+    try:
+        unusual = detect_unusual_spending(session_id, include_persona)
+    except Exception:
+        unusual = []
+
+    # ----- Build insights ------------------------------------------------
+    insights = []
+
+    # 1. BUDGET_STATUS
+    operating_income = Decimal(budget.get('operating_income', '0'))
+    net_expenses = Decimal(budget.get('net_living_expenses', '0'))
+    operating_surplus = Decimal(budget.get('operating_surplus', '0'))
+    overspending = budget.get('overspending', False)
+
+    if operating_income > 0:
+        expense_ratio = (net_expenses / operating_income * Decimal('100')).quantize(
+            Decimal('0.1'), rounding=ROUND_HALF_UP
+        )
+        if overspending:
+            severity = 'CRITICAL'
+            finding = f"You spent more than you earned in {period_label}."
+            action = "Review discretionary categories and identify expenses you can defer or reduce."
+        elif expense_ratio > Decimal('80'):
+            severity = 'HIGH'
+            finding = f"Your expenses consume {expense_ratio}% of your income in {period_label}."
+            action = "Your savings margin is thin. Consider setting a spending cap on your top category."
+        elif expense_ratio > Decimal('50'):
+            severity = 'MEDIUM'
+            finding = f"Your expenses consume {expense_ratio}% of your income in {period_label}."
+            action = "You have a reasonable savings margin. Consider automating the surplus into savings."
+        else:
+            severity = 'LOW'
+            finding = f"Your expenses consume only {expense_ratio}% of your income in {period_label}."
+            action = "Strong savings position. Consider investing the surplus for long-term growth."
+
+        insights.append({
+            'id': f'budget_status_{year}_{month}',
+            'type': 'BUDGET_STATUS',
+            'severity': severity,
+            'finding': finding,
+            'evidence': {
+                'operating_income': str(operating_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'net_expenses': str(net_expenses.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'operating_surplus': str(operating_surplus.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'expense_to_income_ratio': str(expense_ratio) + '%',
+                'period': period_label,
+            },
+            'explanation': (
+                f"Operating income (₹{operating_income.quantize(Decimal('0.01'))}) minus "
+                f"net living expenses (₹{net_expenses.quantize(Decimal('0.01'))}) gives a "
+                f"surplus of ₹{operating_surplus.quantize(Decimal('0.01'))}. "
+                f"Expense-to-income ratio is {expense_ratio}%."
+            ),
+            'action': action,
+            'confidence': 'VERIFIED',
+        })
+
+    # 2. TOP_EXPENSE — largest spending category
+    cat_spending = budget.get('category_spending', {})
+    if cat_spending:
+        top_cat = max(
+            ((k, Decimal(v)) for k, v in cat_spending.items() if k != 'transfer'),
+            key=lambda x: x[1],
+            default=None,
+        )
+        if top_cat and top_cat[1] > 0:
+            cat_name, cat_amount = top_cat
+            cat_pct = (
+                (cat_amount / net_expenses * Decimal('100')).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
+                if net_expenses > 0 else Decimal('0')
+            )
+            severity = 'HIGH' if cat_pct > Decimal('40') else 'MEDIUM' if cat_pct > Decimal('25') else 'LOW'
+            display_cat = cat_name.replace('_', ' ').title()
+
+            # Top 3 categories for context
+            sorted_cats = sorted(
+                ((k, Decimal(v)) for k, v in cat_spending.items() if k != 'transfer' and Decimal(v) > 0),
+                key=lambda x: x[1],
+                reverse=True,
+            )[:3]
+            top_categories = {
+                k.replace('_', ' ').title(): str(v.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                for k, v in sorted_cats
+            }
+
+            insights.append({
+                'id': f'top_expense_{year}_{month}',
+                'type': 'TOP_EXPENSE',
+                'severity': severity,
+                'finding': f"Your largest expense category is {display_cat} at ₹{cat_amount.quantize(Decimal('0.01'))} ({cat_pct}% of expenses).",
+                'evidence': {
+                    'top_category': display_cat,
+                    'amount': str(cat_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                    'percentage_of_expenses': str(cat_pct) + '%',
+                    'top_categories': top_categories,
+                    'period': period_label,
+                },
+                'explanation': (
+                    f"{display_cat} spending of ₹{cat_amount.quantize(Decimal('0.01'))} represents "
+                    f"{cat_pct}% of total net living expenses (₹{net_expenses.quantize(Decimal('0.01'))})."
+                ),
+                'action': f"Review your {display_cat.lower()} transactions to identify any non-essential spending that can be reduced.",
+                'confidence': 'VERIFIED',
+            })
+
+    # 3. RECURRING_COMMITMENT — confirmed recurring payments
+    confirmed_subs = [s for s in subs if s.get('confidence') == RECURRING_CONFIRMED]
+    probable_subs = [s for s in subs if s.get('confidence') == RECURRING_PROBABLE]
+
+    if confirmed_subs:
+        total_confirmed_monthly = sum(
+            Decimal(s.get('estimated_monthly_cost', '0') or '0') for s in confirmed_subs
+        )
+        commitment_pct = (
+            (total_confirmed_monthly / operating_income * Decimal('100')).quantize(
+                Decimal('0.1'), rounding=ROUND_HALF_UP
+            )
+            if operating_income > 0 else Decimal('0')
+        )
+
+        severity = 'HIGH' if commitment_pct > Decimal('30') else 'MEDIUM' if commitment_pct > Decimal('15') else 'LOW'
+
+        sub_details = []
+        for s in confirmed_subs[:5]:  # Top 5 for readability
+            sub_details.append({
+                'merchant': _safe_counterparty_label(s.get('merchant', '')),
+                'monthly_cost': s.get('estimated_monthly_cost', '0'),
+                'payment_type': s.get('payment_type', 'unknown'),
+                'cadence': s.get('cadence', 'unknown'),
+            })
+
+        insights.append({
+            'id': f'recurring_commitment_{year}_{month}',
+            'type': 'RECURRING_COMMITMENT',
+            'severity': severity,
+            'finding': f"You have {len(confirmed_subs)} confirmed recurring payment(s) totalling ₹{total_confirmed_monthly.quantize(Decimal('0.01'))}/month.",
+            'evidence': {
+                'confirmed_count': len(confirmed_subs),
+                'probable_count': len(probable_subs),
+                'total_monthly_cost': str(total_confirmed_monthly.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'commitment_to_income_ratio': str(commitment_pct) + '%' if operating_income > 0 else 'N/A',
+                'top_commitments': sub_details,
+                'period': period_label,
+            },
+            'explanation': (
+                f"{len(confirmed_subs)} recurring payments were detected with CONFIRMED confidence. "
+                f"Total monthly commitment of ₹{total_confirmed_monthly.quantize(Decimal('0.01'))} "
+                + (f"represents {commitment_pct}% of operating income." if operating_income > 0 else ".")
+            ),
+            'action': "Review each recurring payment. Cancel subscriptions you no longer use. Negotiate better rates for utilities and insurance.",
+            'confidence': 'VERIFIED',
+        })
+
+    # 4. POTENTIAL_LEAK — probable recurring payments that might be leaking money
+    leak_subs = [
+        s for s in subs
+        if s.get('confidence') in (RECURRING_CONFIRMED, RECURRING_PROBABLE)
+        and s.get('is_potential_leakage', False)
+    ]
+    if leak_subs:
+        total_leak_monthly = sum(
+            Decimal(s.get('estimated_monthly_cost', '0') or '0') for s in leak_subs
+        )
+        leak_details = []
+        for s in leak_subs[:5]:
+            leak_details.append({
+                'merchant': _safe_counterparty_label(s.get('merchant', '')),
+                'monthly_cost': s.get('estimated_monthly_cost', '0'),
+                'payment_type': s.get('payment_type', 'unknown'),
+                'confidence': s.get('confidence', 'UNKNOWN'),
+            })
+
+        severity = 'HIGH' if total_leak_monthly > Decimal('500') else 'MEDIUM'
+        insights.append({
+            'id': f'potential_leak_{year}_{month}',
+            'type': 'POTENTIAL_LEAK',
+            'severity': severity,
+            'finding': f"{len(leak_subs)} recurring payment(s) flagged as potential leakage, totalling ₹{total_leak_monthly.quantize(Decimal('0.01'))}/month.",
+            'evidence': {
+                'leak_count': len(leak_subs),
+                'total_monthly_leakage': str(total_leak_monthly.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'annual_impact': str((total_leak_monthly * 12).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'flagged_payments': leak_details,
+                'period': period_label,
+            },
+            'explanation': (
+                f"These payments are recurring charges to discretionary services (subscriptions, "
+                f"memberships). If unused, they represent ₹{(total_leak_monthly * 12).quantize(Decimal('0.01'))} "
+                f"per year in avoidable spending."
+            ),
+            'action': "Check whether you actively use each flagged service. Cancel inactive subscriptions to recover this spending.",
+            'confidence': 'VERIFIED',
+        })
+
+    # 5. UNUSUAL_TRANSACTION — transactions flagged by the anomaly detector
+    if unusual:
+        large_amount = [u for u in unusual if u.get('reason') == 'large_amount']
+        duplicates = [u for u in unusual if u.get('reason') == 'duplicate_amount_merchant']
+
+        if large_amount:
+            top_unusual = large_amount[0]
+            insights.append({
+                'id': f'unusual_tx_{top_unusual.get("id", "unknown")}',
+                'type': 'UNUSUAL_TRANSACTION',
+                'severity': 'HIGH',
+                'finding': f"₹{top_unusual['amount']} to {_safe_counterparty_label(top_unusual.get('merchant', 'Unknown'))} on {top_unusual['date']} is significantly above your typical spending.",
+                'evidence': {
+                    'amount': top_unusual['amount'],
+                    'merchant': _safe_counterparty_label(top_unusual.get('merchant', '')),
+                    'date': top_unusual['date'],
+                    'baseline_median': top_unusual.get('baseline', 'N/A'),
+                    'threshold': top_unusual.get('threshold', 'N/A'),
+                    'total_flagged': len(large_amount),
+                },
+                'explanation': (
+                    f"This transaction exceeds 3× the median of all other debits "
+                    f"(median: ₹{top_unusual.get('baseline', 'N/A')}, threshold: ₹{top_unusual.get('threshold', 'N/A')}). "
+                    f"{len(large_amount)} transaction(s) total were flagged as unusually large."
+                ),
+                'action': "Verify this transaction is intentional. If unexpected, contact your bank immediately.",
+                'confidence': 'VERIFIED',
+            })
+
+        if duplicates:
+            insights.append({
+                'id': f'duplicate_flag_{year}_{month}',
+                'type': 'UNUSUAL_TRANSACTION',
+                'severity': 'MEDIUM',
+                'finding': f"{len(duplicates)} potential duplicate charge(s) detected — same merchant, same amount within 30 days.",
+                'evidence': {
+                    'duplicate_count': len(duplicates),
+                    'examples': [
+                        {
+                            'merchant': _safe_counterparty_label(d.get('merchant', '')),
+                            'amount': d['amount'],
+                            'date': d['date'],
+                        }
+                        for d in duplicates[:3]
+                    ],
+                },
+                'explanation': (
+                    "Transactions with the same merchant and amount appearing within a 30-day window "
+                    "may indicate accidental double charges. This is a detection flag, not a fraud accusation."
+                ),
+                'action': "Review these charges. If unintentional, contact the merchant for a refund.",
+                'confidence': 'VERIFIED',
+            })
+
+    # 6. INCOME_ANALYSIS
+    earned_income = Decimal(budget.get('earned_income', '0'))
+    investment_yield = Decimal(budget.get('investment_yield', '0'))
+    total_credits = Decimal(budget.get('total_credits', '0'))
+    refunds_received = Decimal(budget.get('refunds_received', '0'))
+    credit_breakdown = budget.get('credit_breakdown', {})
+    unclassified_credits = Decimal(credit_breakdown.get('unclassified', '0'))
+
+    if total_credits > 0:
+        income_sources = {
+            k.replace('_', ' ').title(): v
+            for k, v in credit_breakdown.items()
+            if Decimal(v or '0') > 0
+        }
+
+        severity = 'INFO'
+        if operating_income == 0 and total_credits > 0:
+            severity = 'MEDIUM'
+            if unclassified_credits > 0:
+                finding = (
+                    f"No earned or investment income detected in {period_label}. "
+                    f"Total inflows of \u20b9{total_credits.quantize(Decimal('0.01'))} include "
+                    f"\u20b9{unclassified_credits.quantize(Decimal('0.01'))} in unclassified credits "
+                    f"requiring review."
+                )
+            else:
+                finding = (
+                    f"No earned or investment income detected in {period_label}. "
+                    f"Total inflows of \u20b9{total_credits.quantize(Decimal('0.01'))} are from non-income sources."
+                )
+        elif unclassified_credits > 0:
+            finding = (
+                f"Total credits of \u20b9{total_credits.quantize(Decimal('0.01'))}: "
+                f"Recognised operating income \u20b9{operating_income.quantize(Decimal('0.01'))}, "
+                f"Unclassified credits \u20b9{unclassified_credits.quantize(Decimal('0.01'))}."
+            )
+        elif earned_income > 0 and investment_yield > 0:
+            finding = (
+                f"Income from {len([v for v in income_sources.values() if Decimal(v) > 0])} source(s) "
+                f"in {period_label}: \u20b9{operating_income.quantize(Decimal('0.01'))} operating income."
+            )
+        else:
+            finding = f"Operating income of \u20b9{operating_income.quantize(Decimal('0.01'))} in {period_label}."
+
+        # Build transparent explanation with unclassified reconciliation
+        if unclassified_credits > 0:
+            explanation = (
+                f"Total credits of \u20b9{total_credits.quantize(Decimal('0.01'))} include "
+                f"\u20b9{operating_income.quantize(Decimal('0.01'))} recognised operating income "
+                f"and \u20b9{unclassified_credits.quantize(Decimal('0.01'))} unclassified credits. "
+                f"Unclassified credits lack verified payroll, yield or client contract markers "
+                f"and are conservatively excluded from operating income rather than guessed."
+            )
+        else:
+            explanation = (
+                f"Total credits of \u20b9{total_credits.quantize(Decimal('0.01'))} include "
+                f"earned income (\u20b9{earned_income.quantize(Decimal('0.01'))}), "
+                f"investment yields (\u20b9{investment_yield.quantize(Decimal('0.01'))}), "
+                f"and refunds (\u20b9{refunds_received.quantize(Decimal('0.01'))})."
+            )
+
+        insights.append({
+            'id': f'income_analysis_{year}_{month}',
+            'type': 'INCOME_ANALYSIS',
+            'severity': severity,
+            'finding': finding,
+            'evidence': {
+                'total_credits': str(total_credits.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'operating_income': str(operating_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'earned_income': str(earned_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'investment_yield': str(investment_yield.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'refunds_received': str(refunds_received.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'unclassified_credits': str(unclassified_credits.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'income_sources': income_sources,
+                'period': period_label,
+            },
+            'explanation': explanation,
+            'action': (
+                "Review unclassified credits to determine whether they represent earned income, "
+                "client payments, or other inflows. Diversify income sources when possible."
+            ) if unclassified_credits > 0 else (
+                "Diversify income sources when possible. Track investment returns separately for tax planning."
+            ),
+            'confidence': 'VERIFIED',
+        })
+
+    # 7. REFUND_WATCH
+    refund_details = budget.get('refund_details', [])
+    if refund_details:
+        confirmed_refunds = [r for r in refund_details if r.get('allocation_status') == ALLOC_APPLIED]
+        unmatched_refunds = [r for r in refund_details if r.get('allocation_status') == ALLOC_NOT_ALLOCATED]
+
+        if unmatched_refunds:
+            total_unmatched = sum(Decimal(r.get('amount', '0')) for r in unmatched_refunds)
+            severity = 'MEDIUM' if total_unmatched > Decimal('500') else 'LOW'
+            insights.append({
+                'id': f'refund_watch_{year}_{month}',
+                'type': 'REFUND_WATCH',
+                'severity': severity,
+                'finding': f"{len(unmatched_refunds)} refund(s) totalling ₹{total_unmatched.quantize(Decimal('0.01'))} could not be matched to an original purchase.",
+                'evidence': {
+                    'total_refunds': len(refund_details),
+                    'confirmed_matched': len(confirmed_refunds),
+                    'unmatched': len(unmatched_refunds),
+                    'unmatched_amount': str(total_unmatched.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                    'period': period_label,
+                },
+                'explanation': (
+                    f"The refund matching engine found {len(refund_details)} refund(s) in {period_label}. "
+                    f"{len(confirmed_refunds)} were matched to original purchases with confirmed evidence. "
+                    f"{len(unmatched_refunds)} could not be matched — the original purchase may be outside "
+                    f"the statement period or from a different account."
+                ),
+                'action': "Check the unmatched refunds against your purchase history to ensure all expected refunds have been received.",
+                'confidence': 'VERIFIED',
+            })
+        elif confirmed_refunds:
+            total_confirmed = sum(Decimal(r.get('allocated_amount', '0')) for r in confirmed_refunds)
+            insights.append({
+                'id': f'refund_watch_{year}_{month}',
+                'type': 'REFUND_WATCH',
+                'severity': 'INFO',
+                'finding': f"All {len(confirmed_refunds)} refund(s) in {period_label} were matched to original purchases (₹{total_confirmed.quantize(Decimal('0.01'))} recovered).",
+                'evidence': {
+                    'total_refunds': len(refund_details),
+                    'confirmed_matched': len(confirmed_refunds),
+                    'total_recovered': str(total_confirmed.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                    'period': period_label,
+                },
+                'explanation': (
+                    f"The refund matching engine confirmed all {len(confirmed_refunds)} refund(s) are "
+                    f"linked to identified purchases with shared reference evidence."
+                ),
+                'action': "No action needed. All refunds are accounted for.",
+                'confidence': 'VERIFIED',
+            })
+
+    # ----- Sort by severity and return -----------------------------------
+    insights.sort(key=lambda i: _SEVERITY_ORDER.get(i['severity'], 99))
+
+    return {
+        'insights': insights,
+        'reporting_period': {
+            'start_date': start_date.isoformat() if start_date else None,
+            'end_date': end_date.isoformat() if end_date else None,
+            'year': year,
+            'month': month,
+            'label': period_label,
+        },
+        'generated_at': datetime.now().isoformat(),
+        'data_source': 'PERSONA' if include_persona else 'IMPORTED_STATEMENT',
+        'insight_count': len(insights),
+        'has_data': True,
+    }

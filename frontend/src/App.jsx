@@ -17,7 +17,9 @@ import FinancialIntelligence from './components/FinancialIntelligence';
 import PrivacyInspector from './components/PrivacyInspector';
 import LeakageRadar from './components/LeakageRadar';
 import EmiSimulator from './components/EmiSimulator';
+import CommitmentStressTest from './components/CommitmentStressTest';
 import TransactionTable from './components/TransactionTable';
+import InsightsBriefing from './components/InsightsBriefing';
 import ConsentModal from './components/ConsentModal';
 import { Card } from './components/ui/Card';
 
@@ -34,6 +36,7 @@ const PAGE_TITLES = {
   INTELLIGENCE: 'Financial Intelligence',
   PRIVACY_INSPECTOR: 'Privacy Inspector',
   LEAKAGE_RADAR: 'Leakage Radar',
+  STRESS_TEST: 'Commitment Stress Test',
   EMI_SIMULATOR: 'EMI Reality Check',
   AUDIT_LEDGER: 'Audit Ledger',
 };
@@ -93,6 +96,7 @@ export default function App() {
   // session creation guarantee exactly one session and one data load.
   const bootstrapStartedRef = useRef(false);
   const recoveryAttemptsRef = useRef(0);
+  const isSelectingPersonaRef = useRef(false);
 
   const runBootstrap = async () => {
     if (bootstrapStartedRef.current) return;
@@ -105,31 +109,46 @@ export default function App() {
 
       // The server owns consent. Reconcile the browser hint against the active
       // consent audit row before rendering the dashboard or the gate.
+      // Treat server-side consent as authoritative.
+      let serverConsent = false;
       try {
         const status = await api.getSessionStatus();
-        if (typeof status?.has_active_consent === 'boolean') {
-          setHasConsented(status.has_active_consent);
-          if (status.has_active_consent) {
-            sessionStorage.setItem('arthashield_consent', 'true');
-          } else {
-            sessionStorage.removeItem('arthashield_consent');
-          }
+        if (status?.has_active_consent === true) {
+          serverConsent = true;
+          setHasConsented(true);
+          sessionStorage.setItem('arthashield_consent', 'true');
+        } else {
+          serverConsent = false;
+          setHasConsented(false);
+          sessionStorage.removeItem('arthashield_consent');
         }
       } catch (statusErr) {
-        console.warn('Could not verify consent status:', statusErr);
+        console.warn('Could not verify consent status with server:', statusErr);
+        serverConsent = false;
+        setHasConsented(false);
+        sessionStorage.removeItem('arthashield_consent');
       }
 
       const data = await api.getPersonas();
-      setPersonas(data.personas || []);
-      if (data.personas && data.personas.length > 0) {
-        await handleSelectPersona(data.personas[0].id, sid);
-      }
-      // Task 17: rehydrate the imported-statement overview for returning
-      // sessions (imports persist server-side). Consent-gated; a 403 simply
-      // keeps the dashboard persona-only for first-time visitors.
-      const overview = await fetchImportedOverview(sid);
-      if (overview?.has_imported_data) {
-        setOverviewMode('IMPORTED');
+      const loadedPersonas = data.personas || [];
+      setPersonas(loadedPersonas);
+
+      // Only select persona and load financial overview if server-side consent is verified active!
+      if (serverConsent && loadedPersonas.length > 0) {
+        if (!isSelectingPersonaRef.current) {
+          isSelectingPersonaRef.current = true;
+          try {
+            await handleSelectPersona(loadedPersonas[0].id, sid, true);
+          } finally {
+            isSelectingPersonaRef.current = false;
+          }
+        }
+        // Task 17: rehydrate the imported-statement overview for returning
+        // sessions (imports persist server-side).
+        const overview = await fetchImportedOverview(sid);
+        if (overview?.has_imported_data) {
+          setOverviewMode('IMPORTED');
+        }
       }
     } catch (err) {
       console.error('Failed to initialise the session:', err);
@@ -216,8 +235,13 @@ export default function App() {
     }
   };
 
-  const handleSelectPersona = async (personaId, overrideSessionId = null) => {
+  const handleSelectPersona = async (personaId, overrideSessionId = null, verifiedConsent = false) => {
     const epoch = dataEpochRef.current;
+    if (!hasConsented && !verifiedConsent) {
+      setShowConsentModal(true);
+      showToast('Consent required before accessing persona financial data.', 'error');
+      return;
+    }
     try {
       const sid = overrideSessionId || sessionId || (await api.ensureSession());
       setSessionId(sid);
@@ -230,7 +254,14 @@ export default function App() {
       setSafeToSpend(res.safe_to_spend);
       showToast(`Loaded Persona: ${res.persona.name}`);
     } catch (err) {
-      console.error('Failed to select persona:', err);
+      if (err?.response?.status === 403) {
+        setHasConsented(false);
+        sessionStorage.removeItem('arthashield_consent');
+        setShowConsentModal(true);
+        console.warn('Persona selection blocked: active consent required.');
+      } else {
+        console.error('Failed to select persona:', err);
+      }
     }
   };
 
@@ -276,13 +307,18 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 4500);
   };
 
-  const handleConsent = () => {
+  const handleConsent = async () => {
     sessionStorage.setItem('arthashield_consent', 'true');
     setConsentGateDismissed(false);
     setHasConsented(true);
-    // Re-hydrate the dashboard if state was cleared by a withdrawal.
-    if (!selectedPersona && personas.length > 0) {
-      handleSelectPersona(personas[0].id);
+    // Re-hydrate the dashboard if state was cleared by a withdrawal or on first consent
+    if (!selectedPersona && personas.length > 0 && !isSelectingPersonaRef.current) {
+      isSelectingPersonaRef.current = true;
+      try {
+        await handleSelectPersona(personas[0].id, sessionId, true);
+      } finally {
+        isSelectingPersonaRef.current = false;
+      }
     }
     // Task 17: the imported-statement overview was cleared by the withdrawal
     // but its transactions persist server-side. Re-hydrate it the same way.
@@ -348,6 +384,33 @@ export default function App() {
     (overviewMode === 'PERSONA' && selectedPersona) || !hasImportedOverview
       ? 'PERSONA'
       : 'IMPORTED';
+
+  // One resolved dataset for the whole app. Every screen reads these values so
+  // an imported statement can never be mixed with persona transactions or a
+  // persona-created financial snapshot.
+  const activeDatasetMode = currentOverviewMode;
+  const includePersona = activeDatasetMode === 'PERSONA';
+  const activeDatasetLabel = includePersona
+    ? 'DEMO PERSONA · SCENARIO'
+    : 'IMPORTED STATEMENT · OBSERVED';
+  const activeDatasetPeriod = includePersona
+    ? 'SCENARIO PERIOD'
+    : importedOverview?.statement_period?.label || 'STATEMENT PERIOD';
+  const activeDatasetBasis = includePersona
+    ? 'INFERRED / SCENARIO ESTIMATE'
+    : 'OBSERVED FROM IMPORTED TRANSACTIONS';
+
+  const handleDatasetModeChange = (nextIncludePersona) => {
+    if (nextIncludePersona) {
+      setOverviewMode('PERSONA');
+      return;
+    }
+    if (hasImportedOverview) {
+      setOverviewMode('IMPORTED');
+    } else {
+      showToast('Import a statement before switching to imported data.', 'error');
+    }
+  };
 
   return (
     <div className="relative min-h-screen bg-black text-white font-sans antialiased selection:bg-white selection:text-black overflow-x-hidden">
@@ -471,7 +534,7 @@ export default function App() {
                         <CrypticText text={selectedPersona.name} triggerKey={selectedPersona.id} />
                       </h2>
                       <span className="border border-white bg-black px-2 py-0.5 text-[9px] font-mono uppercase text-white font-bold tracking-widest shrink-0">
-                        SYNTHETIC PERSONA
+                        {includePersona ? 'SYNTHETIC PERSONA' : 'PERSONA PROFILE · INACTIVE'}
                       </span>
                       <span className="hidden sm:inline-block text-[10px] font-mono text-[#AAAAAA]">
                         [SYS: OK]
@@ -479,10 +542,14 @@ export default function App() {
                     </div>
                     <p className="text-xs text-[#AAAAAA] font-mono mt-1.5 m-0 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span>{selectedPersona.profile}</span>
-                      <span className="text-[#767676]">◈</span>
-                      <span>{selectedPersona.account_summary.bank_name}</span>
-                      <span className="text-[#767676]">◈</span>
-                      <span className="text-white font-bold">{selectedPersona.account_summary.masked_account_number}</span>
+                      {includePersona && (
+                        <>
+                          <span className="text-[#767676]">◈</span>
+                          <span>{selectedPersona.account_summary.bank_name}</span>
+                          <span className="text-[#767676]">◈</span>
+                          <span className="text-white font-bold">{selectedPersona.account_summary.masked_account_number}</span>
+                        </>
+                      )}
                     </p>
                   </div>
 
@@ -492,10 +559,14 @@ export default function App() {
                         Monthly Inflow
                       </div>
                       <div className="text-lg sm:text-xl font-bold text-white mt-0.5 tracking-tight">
-                        <CrypticText 
-                          text={`₹${selectedPersona.monthly_average_income?.toLocaleString('en-IN')}`} 
-                          triggerKey={selectedPersona.id} 
-                        />
+                        {includePersona ? (
+                          <CrypticText 
+                            text={`₹${selectedPersona.monthly_average_income?.toLocaleString('en-IN')}`} 
+                            triggerKey={selectedPersona.id} 
+                          />
+                        ) : (
+                          <span className="text-[#888888]">NOT ACTIVE</span>
+                        )}
                       </div>
                     </div>
 
@@ -504,10 +575,14 @@ export default function App() {
                         Liquid Balance
                       </div>
                       <div className="text-lg sm:text-xl font-bold text-white mt-0.5 tracking-tight">
-                        <CrypticText 
-                          text={`₹${selectedPersona.account_summary.current_balance?.toLocaleString('en-IN')}`} 
-                          triggerKey={selectedPersona.id} 
-                        />
+                        {includePersona ? (
+                          <CrypticText 
+                            text={`₹${selectedPersona.account_summary.current_balance?.toLocaleString('en-IN')}`} 
+                            triggerKey={selectedPersona.id} 
+                          />
+                        ) : (
+                          <span className="text-[#888888]">NOT ACTIVE</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -522,6 +597,21 @@ export default function App() {
                   <span>ENCRYPTION: AES-256 / SHA-256 IDENTIFIER</span>
                 </div>
               </Card>
+            )}
+
+            {/* Single active dataset banner — shown on every screen */}
+            {sessionReady && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border border-[#202020] bg-black/90 px-3 py-2 font-mono text-[9px] uppercase tracking-widest text-[#AAAAAA]">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Layers className="w-3.5 h-3.5 text-white" />
+                  <span className="text-white font-bold">ACTIVE DATASET</span>
+                  <span className="border border-white bg-black px-2 py-0.5 text-white font-bold">
+                    {activeDatasetLabel}
+                  </span>
+                  <span>{activeDatasetPeriod}</span>
+                </div>
+                <span className="text-[#888888]">BASIS: {activeDatasetBasis}</span>
+              </div>
             )}
 
             {/* Module Views — Boot Sequence Stage 3 */}
@@ -618,6 +708,15 @@ export default function App() {
                           total_monthly_leakage: parseFloat(importedOverview.summary?.monthly_leakage || '0'),
                           items_count: importedOverview.summary?.confirmed_recurring_count || 0,
                         }}
+                        datasetSourceLabel={activeDatasetLabel}
+                        reportingPeriod={activeDatasetPeriod}
+                        metricBasis={importedOverview.health_metrics?.metric_basis || {}}
+                        leakageStatus="EVIDENCE_REVIEW"
+                      />
+                      <InsightsBriefing
+                        sessionId={sessionId}
+                        includePersona={false}
+                        datasetSourceLabel={activeDatasetLabel}
                       />
                       <TransactionTable transactions={importedOverview.transactions || []} />
                     </>
@@ -628,6 +727,15 @@ export default function App() {
                         safeToSpend={safeToSpend}
                         selectedPersona={selectedPersona}
                         detectedLeaks={selectedPersona?.detected_leaks_summary}
+                        datasetSourceLabel={activeDatasetLabel}
+                        reportingPeriod={activeDatasetPeriod}
+                        metricBasis={{ health_score: 'PERSONA_SCENARIO_ESTIMATE', runway: 'PERSONA_SCENARIO_ESTIMATE' }}
+                        leakageStatus="SCENARIO_UNVERIFIED"
+                      />
+                      <InsightsBriefing
+                        sessionId={sessionId}
+                        includePersona={true}
+                        datasetSourceLabel={activeDatasetLabel}
                       />
                       <TransactionTable transactions={selectedPersona?.transactions || []} />
                     </>
@@ -637,10 +745,17 @@ export default function App() {
 
               {activeTab === 'INTELLIGENCE' && sessionReady && (
                 <div className="view-enter">
-                  <FinancialIntelligence 
-                    sessionId={sessionId} 
+                  <FinancialIntelligence
+                    sessionId={sessionId}
+                    includePersona={includePersona}
+                    onIncludePersonaChange={handleDatasetModeChange}
+                    datasetSourceLabel={activeDatasetLabel}
                     onRefreshParent={() => {
-                      if (selectedPersona) handleSelectPersona(selectedPersona.id, sessionId);
+                      if (includePersona && selectedPersona) {
+                        handleSelectPersona(selectedPersona.id, sessionId);
+                      } else {
+                        fetchImportedOverview(sessionId, true);
+                      }
                     }}
                   />
                 </div>
@@ -648,8 +763,10 @@ export default function App() {
 
               {activeTab === 'PRIVACY_INSPECTOR' && sessionReady && (
                 <div className="view-enter">
-                  <PrivacyInspector 
-                    sessionId={sessionId} 
+                  <PrivacyInspector
+                    sessionId={sessionId}
+                    includePersona={includePersona}
+                    datasetSourceLabel={activeDatasetLabel}
                     onImportSuccess={async (data) => {
                       showToast(`Imported ${data.persistence?.imported || data.transactions?.length || 0} transactions!`);
                       if (selectedPersona) handleSelectPersona(selectedPersona.id, sessionId);
@@ -666,7 +783,29 @@ export default function App() {
 
               {activeTab === 'LEAKAGE_RADAR' && sessionReady && (
                 <div className="view-enter">
-                  <LeakageRadar leaksSummary={selectedPersona?.detected_leaks_summary} sessionId={sessionId} />
+                  <LeakageRadar
+                    leaksSummary={selectedPersona?.detected_leaks_summary}
+                    sessionId={sessionId}
+                    includePersona={includePersona}
+                    datasetSourceLabel={activeDatasetLabel}
+                    reportingPeriod={activeDatasetPeriod}
+                  />
+                </div>
+              )}
+
+              {activeTab === 'STRESS_TEST' && sessionReady && (
+                <div className="view-enter">
+                  <CommitmentStressTest
+                    sessionId={sessionId}
+                    discretionaryBuffer={safeToSpend?.uncommitted_discretionary_buffer || 14000}
+                    currentBalance={
+                      includePersona && selectedPersona
+                        ? selectedPersona?.account_summary?.current_balance
+                        : null
+                    }
+                    includePersona={includePersona}
+                    onNavigateToLedger={() => setActiveTab('AUDIT_LEDGER')}
+                  />
                 </div>
               )}
 
@@ -682,7 +821,32 @@ export default function App() {
 
               {activeTab === 'AUDIT_LEDGER' && (
                 <div className="view-enter space-y-4">
-                  <TransactionTable transactions={selectedPersona?.transactions || []} />
+                  <div className="flex flex-wrap items-center justify-between gap-3 border border-[#202020] bg-black/90 p-3 font-mono text-[9px] uppercase tracking-widest text-[#AAAAAA]">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-3.5 h-3.5 text-white" />
+                      <span className="text-white font-bold">LEDGER DATA SOURCE</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="border border-white bg-black px-2 py-0.5 text-white font-bold">
+                        {activeDatasetLabel}
+                      </span>
+                      <span>{activeDatasetPeriod}</span>
+                      <span>
+                        {includePersona ? 'Scenario rows' : 'Imported statement rows'}:{' '}
+                        {(includePersona
+                          ? selectedPersona?.transactions
+                          : importedOverview?.transactions
+                        )?.length || 0}
+                      </span>
+                    </div>
+                  </div>
+                  <TransactionTable
+                    transactions={
+                      includePersona
+                        ? selectedPersona?.transactions || []
+                        : importedOverview?.transactions || []
+                    }
+                  />
                 </div>
               )}
             </div>

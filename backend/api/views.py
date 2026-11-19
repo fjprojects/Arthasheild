@@ -35,6 +35,7 @@ from .security import (
 )
 from sanitizer.services import SanitizerService
 from analytics.services import AnalyticsEngine, _parse_date
+from analytics.stress_test import run_commitment_stress_test
 from advisor.services import AdvisorService
 from data_processor.statement_parser import (
     BankStatementParser,
@@ -47,11 +48,15 @@ from data_processor.transfers import transfer_identity
 from .insights import (
     _safe_counterparty_label,
     categorize_transactions,
+    classify_credit,
+    classify_debit,
     monthly_budget,
     detect_subscriptions,
     detect_unusual_spending,
     spending_patterns,
     compute_imported_session_overview,
+    compute_dataset_financial_metrics,
+    generate_evidence_briefing,
 )
 from .response_safety import (
     PERSON_PLACEHOLDER,
@@ -71,6 +76,17 @@ MAX_UPLOAD_SIZE_BYTES = MAX_FILE_SIZE_BYTES  # 5 MB
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _parse_request_bool(value) -> bool:
+    """Parse a client-provided boolean without treating "false" as True."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "persona", "demo"}
+    return False
+
 
 def _get_active_consent(session_id: str):
     """
@@ -651,46 +667,109 @@ class DocumentAnalyzeView(APIView):
             SanitizerService.sanitize(sanitized_text)["sanitized_text"]
         )
 
-        # Every figure handed to the advisor comes from the deterministic Python
-        # engine. No placeholder values are invented when a session has no data.
-        snapshot = FinancialSnapshot.objects.filter(session_id=session_id).first()
-        recurring = detect_subscriptions(session_id, include_persona=True)
-        monthly_commitments = sum(
-            Decimal(str(entry.get("estimated_monthly_cost") or 0))
-            for entry in recurring
-            if entry.get("is_financial_commitment")
+        # Dataset provenance: the caller declares the active dataset. It is
+        # validated against the session ledger, and metrics are derived from
+        # that dataset only. A persona-created snapshot is never substituted
+        # for an imported-statement analysis.
+        include_persona = _parse_request_bool(request.data.get("include_persona", False))
+        dataset_metrics = compute_dataset_financial_metrics(session_id, include_persona)
+        has_persona_rows = Transaction.objects.filter(
+            session_id=session_id, source_type=Transaction.SOURCE_PERSONA
+        ).exists()
+        has_imported_rows = Transaction.objects.filter(
+            session_id=session_id, source_type=Transaction.SOURCE_IMPORT
+        ).exists()
+        requested_dataset_has_rows = (
+            has_persona_rows if include_persona else has_imported_rows
         )
-        monthly_leakage = sum(
-            Decimal(str(entry.get("estimated_monthly_cost") or 0))
-            for entry in recurring
-            if entry.get("is_potential_leakage")
+        snapshot = (
+            FinancialSnapshot.objects.filter(session_id=session_id)
+            .order_by('-created_at')
+            .first()
         )
 
-        if snapshot:
+        use_dataset_metrics = (
+            dataset_metrics.get('status') == 'AVAILABLE' and requested_dataset_has_rows
+        )
+        # Legacy snapshots remain readable only for import-mode sessions that
+        # have never loaded persona data. Once persona rows exist, their
+        # snapshot values are scenario estimates and must not be presented as
+        # real imported-statement metrics.
+        use_legacy_snapshot = (
+            not include_persona
+            and not has_persona_rows
+            and has_imported_rows
+            and snapshot is not None
+        )
+
+        metrics = {}
+        if use_legacy_snapshot:
+            recurring = detect_subscriptions(session_id, include_persona=False)
             metrics = {
+                "data_source": "IMPORTED_STATEMENT",
+                "dataset_status": "IMPORTED_LEGACY_SNAPSHOT",
+                "reporting_period": None,
                 "health_score": snapshot.health_score,
                 "health_grade": snapshot.health_grade,
                 "emergency_runway_months": snapshot.emergency_runway_months,
+                "runway_status": "LEGACY_SNAPSHOT_ESTIMATE",
+                "balance_source": "LEGACY_SNAPSHOT",
                 "monthly_income": float(snapshot.monthly_income),
                 "monthly_expenses": float(snapshot.monthly_expenses),
                 "monthly_leakage": float(snapshot.monthly_leakage_detected),
                 "safe_to_spend_daily": float(snapshot.safe_to_spend_daily),
+                "metric_basis": {
+                    "income": "SESSION_SNAPSHOT",
+                    "expenses": "SESSION_SNAPSHOT",
+                    "recurring": "EVIDENCE_BASED_DETECTION",
+                    "runway": "SESSION_SNAPSHOT_ESTIMATE",
+                },
+                "recurring_commitments": {
+                    "monthly_commitments": float(sum(
+                        Decimal(str(entry.get("estimated_monthly_cost") or 0))
+                        for entry in recurring
+                        if entry.get("is_financial_commitment")
+                    )),
+                    "monthly_leakage": float(sum(
+                        Decimal(str(entry.get("estimated_monthly_cost") or 0))
+                        for entry in recurring
+                        if entry.get("is_potential_leakage")
+                    )),
+                    "confirmed_commitment_count": sum(
+                        1 for entry in recurring if entry.get("is_financial_commitment")
+                    ),
+                    "recurring_pattern_count": sum(
+                        1 for entry in recurring if not entry.get("is_financial_commitment")
+                    ),
+                },
+                "dataset_metrics": dataset_metrics,
+            }
+        elif use_dataset_metrics:
+            metrics = {
+                "data_source": dataset_metrics['data_source'],
+                "dataset_status": dataset_metrics['status'],
+                "reporting_period": dataset_metrics.get('reporting_period'),
+                "monthly_income": dataset_metrics['monthly_income'],
+                "monthly_expenses": dataset_metrics['monthly_expenses'],
+                "health_score": dataset_metrics.get('health_score'),
+                "health_grade": dataset_metrics.get('health_grade'),
+                "emergency_runway_months": dataset_metrics.get('emergency_runway_months'),
+                "runway_status": dataset_metrics.get('runway_status'),
+                "balance_source": dataset_metrics.get('balance_source'),
+                "metric_basis": dataset_metrics.get('metric_basis'),
+                "recurring_commitments": dataset_metrics['recurring_commitments'],
+                "dataset_metrics": dataset_metrics,
             }
         else:
-            # No snapshot for this session: the document can still be explained,
-            # but there are no verified financial metrics to quote.
-            metrics = {}
-
-        metrics["recurring_commitments"] = {
-            "monthly_commitments": float(monthly_commitments),
-            "monthly_leakage": float(monthly_leakage),
-            "confirmed_commitment_count": sum(
-                1 for entry in recurring if entry.get("is_financial_commitment")
-            ),
-            "recurring_pattern_count": sum(
-                1 for entry in recurring if not entry.get("is_financial_commitment")
-            ),
-        }
+            metrics = {
+                "data_source": dataset_metrics['data_source'],
+                "dataset_status": "INSUFFICIENT_DATA",
+                "insufficient_reason": dataset_metrics.get('insufficient_reason', 'SELECTED_DATASET_UNAVAILABLE'),
+                "requested_dataset_has_rows": requested_dataset_has_rows,
+                "recurring_commitments": dataset_metrics['recurring_commitments'],
+                "metric_basis": dataset_metrics.get('metric_basis'),
+                "dataset_metrics": dataset_metrics,
+            }
 
         advisor_insights = AdvisorService.analyze_sanitized_statement(
             server_sanitized, metrics
@@ -853,6 +932,14 @@ class ParseStatementView(APIView):
                         skipped_dups += 1
                         continue
 
+                    # Auto-categorize using the classification engine
+                    _tx_cat = getattr(tx, "category", "Uncategorized") or "Uncategorized"
+                    if _tx_cat.lower() in ("uncategorized", "general", ""):
+                        if tx.transaction_type == "CREDIT":
+                            _tx_cat = classify_credit(tx.normalized_merchant)["category"]
+                        else:
+                            _tx_cat = classify_debit(tx.normalized_merchant)["category"]
+
                     Transaction.objects.create(
                         snapshot=snapshot,
                         session_id=session_id,
@@ -860,8 +947,7 @@ class ParseStatementView(APIView):
                         amount=tx.amount,
                         transaction_type=tx.transaction_type,
                         normalized_merchant=tx.normalized_merchant,
-                        category=getattr(tx, "category", "Uncategorized")
-                        or "Uncategorized",
+                        category=_tx_cat,
                         is_recurring=getattr(tx, "is_recurring", False),
                         is_leak=getattr(tx, "is_leak", False),
                         hidden_fee_estimate=getattr(
@@ -1467,3 +1553,206 @@ class ImportedSessionOverviewView(APIView):
         ]
         data["transactions"] = public_transactions
         return Response(data)
+
+
+class EvidenceBriefingView(APIView):
+    """
+    Evidence-Based Financial Insights Briefing.
+
+    Synthesises all existing financial intelligence into a structured briefing
+    where every insight is backed by deterministic calculations. The AI layer
+    may explain results but never invents financial figures.
+
+    POST /api/v1/insights/evidence-briefing/
+    Body: { "session_id": "...", "include_persona": false }
+    """
+    def post(self, request):
+        auth_session, err = authenticate_request_session(request, required=True)
+        if err:
+            return err
+        session_id = auth_session.session_id
+
+        if not _get_active_consent(session_id):
+            return Response(
+                {
+                    "error": "Active user consent is required for financial intelligence analysis.",
+                    "code": "CONSENT_REQUIRED",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        include_persona = request.data.get('include_persona', False)
+        data = generate_evidence_briefing(session_id, include_persona)
+
+        # Apply safe counterparty labels to any merchant names in insight evidence
+        for insight in data.get('insights', []):
+            evidence = insight.get('evidence', {})
+            if 'merchant' in evidence:
+                evidence['merchant'] = _safe_counterparty_label(evidence['merchant'])
+            # Sanitise nested commitment/leak details
+            for key in ('top_commitments', 'flagged_payments', 'examples'):
+                for item in evidence.get(key, []):
+                    if 'merchant' in item:
+                        item['merchant'] = _safe_counterparty_label(item['merchant'])
+
+        return Response(data)
+
+class CommitmentStressTestView(APIView):
+    """
+    Commitment Stress Test & Judgment Flip Engine Endpoint.
+    Deterministic multi-scenario evaluation (Buy Now vs EMI vs Wait).
+    """
+    def post(self, request):
+        auth_session, err = authenticate_request_session(request, required=True, require_consent=False)
+        if err:
+            return err
+        session_id = auth_session.session_id
+
+        item_name = str(request.data.get("item_name", "Proposed Purchase")).strip()
+        try:
+            price = float(request.data.get("price", 65000.0))
+            down_payment = float(request.data.get("down_payment", 0.0))
+            tenure_months = int(request.data.get("tenure_months", 12))
+            nominal_apr = float(request.data.get("nominal_apr", 0.0))
+            monthly_fee = float(request.data.get("monthly_processing_fee", 199.0))
+            upfront_fee = float(request.data.get("upfront_processing_fee", 0.0))
+            gst_rate_pct = float(request.data.get("gst_rate_pct", 18.0))
+            delay_days = int(request.data.get("delay_days", 0))
+            discretionary_reduction_pct = float(request.data.get("discretionary_reduction_pct", 0.0))
+            custom_liquid_balance = (
+                float(request.data["custom_liquid_balance"])
+                if "custom_liquid_balance" in request.data and request.data["custom_liquid_balance"] is not None
+                else None
+            )
+        except (ValueError, TypeError) as e:
+            return Response(
+                {"error": "Invalid numerical parameters.", "details": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        commitment_type = str(request.data.get("commitment_type", "no_cost_emi")).strip().lower()
+        include_persona = bool(request.data.get("include_persona", False))
+
+        try:
+            result = run_commitment_stress_test(
+                session_id=session_id,
+                item_name=item_name,
+                price=price,
+                commitment_type=commitment_type,
+                down_payment=down_payment,
+                tenure_months=tenure_months,
+                nominal_apr=nominal_apr,
+                monthly_processing_fee=monthly_fee,
+                upfront_processing_fee=upfront_fee,
+                gst_rate_pct=gst_rate_pct,
+                delay_days=delay_days,
+                discretionary_reduction_pct=discretionary_reduction_pct,
+                custom_liquid_balance=custom_liquid_balance,
+                include_persona=include_persona,
+            )
+        except Exception:
+            # An internal failure is a computation error, never a SAFE verdict.
+            logger.exception("Commitment stress test computation failed for session %s", session_id)
+            return Response(
+                {
+                    "error": "The stress test could not be computed for this session.",
+                    "code": "STRESS_TEST_COMPUTATION_ERROR",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class CommitmentStressTestExplainView(APIView):
+    """
+    AI Semantic Explanation for Commitment Stress Test & Judgment Flip.
+    Strictly verifies that all cited evidence transaction IDs exist in the active session.
+    Falls back gracefully to deterministic rule-based output when Gemini is unavailable.
+    """
+    def post(self, request):
+        auth_session, err = authenticate_request_session(request, required=True, require_consent=False)
+        if err:
+            return err
+        session_id = auth_session.session_id
+
+        decision_packet = request.data.get("decision_packet")
+        if not isinstance(decision_packet, dict):
+            return Response(
+                {"error": "decision_packet must be a valid JSON object."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Gather authentic session transaction IDs for strict validation
+        valid_session_tx_ids = set(
+            str(t.id) for t in Transaction.objects.filter(session_id=session_id)
+        )
+
+        explanation = AdvisorService.explain_commitment_stress_test(
+            decision_packet=decision_packet,
+            valid_session_tx_ids=valid_session_tx_ids,
+        )
+
+        return Response(explanation, status=status.HTTP_200_OK)
+
+
+class TransactionCorrectionView(APIView):
+    """
+    Human Correction of Uncertain Transactions.
+    Allows user to reclassify an expense as an internal account transfer or adjust category.
+    Strictly verifies session ownership to prevent cross-session tamper.
+    """
+    def post(self, request):
+        auth_session, err = authenticate_request_session(request, required=True, require_consent=False)
+        if err:
+            return err
+        session_id = auth_session.session_id
+
+        tx_id = request.data.get("transaction_id")
+        if not tx_id:
+            return Response(
+                {"error": "transaction_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Cross-session isolation check
+        try:
+            tx = Transaction.objects.get(id=tx_id, session_id=session_id)
+        except (Transaction.DoesNotExist, ValueError):
+            return Response(
+                {"error": "Transaction not found or not owned by active session.", "code": "TX_NOT_FOUND"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        is_transfer = request.data.get("is_transfer")
+        new_category = request.data.get("new_category")
+        user_note = request.data.get("notes", "").strip()
+
+        old_category = tx.category
+        updated = False
+
+        if is_transfer is True:
+            tx.category = "transfer"
+            tx.is_recurring = False
+            tx.risk_note = f"[USER_CORRECTION] Marked as internal own-account transfer. {user_note}".strip()
+            updated = True
+        elif new_category and isinstance(new_category, str):
+            clean_cat = new_category.strip().title()
+            tx.category = clean_cat
+            tx.risk_note = f"[USER_CORRECTION] Category updated from {old_category} to {clean_cat}. {user_note}".strip()
+            updated = True
+
+        if updated:
+            tx.save()
+
+        return Response(
+            {
+                "status": "CORRECTION_SAVED",
+                "transaction_id": str(tx.id),
+                "previous_category": old_category,
+                "current_category": tx.category,
+                "is_transfer": tx.category.lower() == "transfer",
+                "risk_note": tx.risk_note,
+            },
+            status=status.HTTP_200_OK,
+        )

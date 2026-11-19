@@ -379,7 +379,7 @@ SANITIZED TRANSACTION & DOCUMENT TEXT:
     @classmethod
     def _generate_heuristic_response(cls, sanitized_text: str, computed_metrics: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Deterministic, zero-hallucination fallback that provides structured insights
+        Deterministic, evidence-checked fallback that provides structured insights
         even when offline or running without an API key.
         Clearly labeled as Offline Rule-Based Financial Insights.
 
@@ -396,25 +396,47 @@ SANITIZED TRANSACTION & DOCUMENT TEXT:
         monthly_commitments = recurring.get("monthly_commitments") or 0
 
         if monthly_leakage:
-            leak_impact = f"Reduce identified recurring charges worth ₹{monthly_leakage}/mo"
+            leak_impact = f"₹{monthly_leakage}/mo of confirmed recurring payments are review candidates"
         else:
-            leak_impact = "Amount depends on the recurring charges found in your statement"
+            leak_impact = "No confirmed avoidable recurring amount was established from the available evidence"
         if monthly_commitments:
-            commitment_impact = f"₹{monthly_commitments}/mo of recurring commitments are already reserved"
+            commitment_impact = f"₹{monthly_commitments}/mo of confirmed recurring commitments were detected"
         else:
-            commitment_impact = "Amount depends on the recurring commitments found in your statement"
+            commitment_impact = "No confirmed recurring commitment amount was established"
 
         if health is not None and runway is not None:
             summary = (
                 f"Your finances have a health score of {health}/100 with an emergency runway of "
-                f"{runway} months. We identified several recurring leaks that can be eliminated "
-                "to immediately restore your disposable cash buffer."
+                f"{runway} months. Recurring payments were detected from transaction evidence. "
+                "Usage was not observable, so treat them as review candidates rather than proven "
+                "savings; verify each charge before deciding to cancel anything."
+            )
+        elif "monthly_income" in computed_metrics or "monthly_expenses" in computed_metrics:
+            is_persona = str(computed_metrics.get("data_source", "")).upper() == "PERSONA_SCENARIO"
+            income_label = "persona-scenario income" if is_persona else "observed income"
+            expense_label = "persona-scenario expenses" if is_persona else "observed expenses"
+            figures = []
+            if "monthly_income" in computed_metrics:
+                figures.append(f"{income_label} of ₹{float(computed_metrics['monthly_income']):,.2f}")
+            if "monthly_expenses" in computed_metrics:
+                figures.append(f"{expense_label} of ₹{float(computed_metrics['monthly_expenses']):,.2f}")
+            source_label = "the selected persona scenario" if is_persona else "the selected imported statement"
+            runway_note = (
+                "Emergency runway is withheld because no verified balance is available for this dataset."
+                if runway is None
+                else f"Emergency runway is {runway} months."
+            )
+            summary = (
+                f"Deterministic figures are available from {source_label}: "
+                f"{'; '.join(figures)}. {runway_note} "
+                "Recurring payments are evidence-derived review candidates, not verified savings."
             )
         else:
             summary = (
                 "No deterministic financial metrics are available for this session yet. "
-                "Import a bank statement (or load a demo persona) to compute verified income, "
-                "spending and runway figures; every amount below is derived from those metrics."
+                "Import a bank statement (or load a demo persona, labelled as a scenario estimate) "
+                "to compute evidence-based income and spending figures. Runway requires a verified "
+                "balance and is withheld when that balance is unavailable."
             )
 
         return {
@@ -427,14 +449,14 @@ SANITIZED TRANSACTION & DOCUMENT TEXT:
             "plain_english_summary": summary,
             "top_actionable_wins": [
                 {
-                    "title": "Prune Dormant Recurring Subscriptions",
+                    "title": "Review Recurring Payments",
                     "impact_amount": leak_impact,
-                    "action": "Cancel idle cloud hosting, duplicate design seats, or unutilized course memberships identified in your statement."
+                    "action": "Check usage and renewal terms for each detected recurring payment. The statement shows the charge, not whether it is idle, duplicated or unused; verified savings depend on what you actually stop using."
                 },
                 {
                     "title": "Establish Safe-to-Spend Ceiling",
-                    "impact_amount": f"{commitment_impact}; keep a daily UPI cap for discretionary spending",
-                    "action": "Cap non-essential daily discretionary UPI expenses to preserve pending rent and EMI obligations."
+                    "impact_amount": f"{commitment_impact}; review the daily discretionary cap separately",
+                    "action": "Use observed income and confirmed commitments to set a discretionary cap; rent and loan instalments are obligations, not avoidable leakage."
                 },
                 {
                     "title": "Audit Hidden EMI Charges",
@@ -445,15 +467,225 @@ SANITIZED TRANSACTION & DOCUMENT TEXT:
             "hidden_risks_and_predatory_clauses": [
                 {
                     "risk_name": "Disguised 0% EMI Surcharges",
-                    "explanation": "No-cost EMIs frequently levy processing fees and 18% GST on interest discounts, significantly inflating true borrowing cost.",
+                    "explanation": "No-cost EMIs may levy processing fees and GST on interest discounts. The simulator's calculated effective annual cost should be checked before signing.",
                     "severity": "HIGH"
                 },
                 {
-                    "risk_name": "Auto-Debit Subscription Creep",
-                    "explanation": "Micro-mandates between ₹100 and ₹900 quietly renew without prompt notifications, draining your savings buffer.",
+                    "risk_name": "Auto-Debit Renewal Terms",
+                    "explanation": "Recurring payments can renew automatically. Confirm the renewal date, notice period and usage before cancelling; the statement alone cannot prove a service is unused.",
                     "severity": "MEDIUM"
                 }
             ],
             "disclaimer": "Educational financial analysis generated with privacy-preserving deterministic engine. Not certified financial advice."
+        }
+
+    STRESS_TEST_SYSTEM_INSTRUCTION = """
+You are ArthaShield, an elite privacy-first AI financial copilot.
+Your core mandates for Commitment Stress Testing:
+1. PRIVACY FIRST: You only see pre-computed deterministic figures and pseudonymized tokens. Never ask for or mention PII.
+2. ZERO ARITHMETIC HALLUCINATIONS: All sums, runways, and XIRR rates were computed by Python. Cite those exact figures.
+3. STRICT SCHEMA: Return strict JSON with:
+{
+  "explanation": "string (2-3 empathetic sentences explaining the trade-offs)",
+  "financial_constraints": ["string", "string"],
+  "evidence_transaction_ids": ["uuid-string", ...],
+  "assumptions": ["string", "string"],
+  "scenario_suggestions": ["string", "string"]
+}
+Only cite transaction IDs that were explicitly provided in the evidence ledger. Never invent transaction IDs.
+"""
+
+    @classmethod
+    def explain_commitment_stress_test(
+        cls, decision_packet: Dict[str, Any], valid_session_tx_ids: set
+    ) -> Dict[str, Any]:
+        """
+        Generates a semantic AI explanation for the Commitment Stress Test & Judgment Flip.
+        Verifies that all cited evidence transaction IDs exist in the active session.
+        Falls back to deterministic offline rules if Gemini is unavailable or returns invalid data.
+        """
+        api_key = cls.get_api_key()
+        if not api_key:
+            return cls._generate_stress_test_fallback(decision_packet, valid_session_tx_ids, engine_status="OFFLINE_FALLBACK")
+
+        # Strip any unneeded fields and sanitize
+        safe_packet = {
+            "item_name": decision_packet.get("item_name"),
+            "proposed_amount": decision_packet.get("proposed_amount"),
+            "commitment_type": decision_packet.get("commitment_type"),
+            "overall_verdict": decision_packet.get("overall_verdict"),
+            "primary_reason": decision_packet.get("primary_reason"),
+            "baseline": decision_packet.get("baseline"),
+            "scenario_a_buy_now": {
+                "verdict": decision_packet.get("scenario_a_buy_now", {}).get("verdict"),
+                "emergency_runway_months": decision_packet.get("scenario_a_buy_now", {}).get("emergency_runway_months"),
+                "remaining_safety_buffer": decision_packet.get("scenario_a_buy_now", {}).get("remaining_safety_buffer"),
+            },
+            "scenario_b_emi": {
+                "verdict": decision_packet.get("scenario_b_emi", {}).get("verdict"),
+                "effective_monthly_commitment": decision_packet.get("scenario_b_emi", {}).get("effective_monthly_commitment"),
+                "effective_annual_cost_pct": decision_packet.get("scenario_b_emi", {}).get("effective_annual_cost_pct"),
+                "emergency_runway_months": decision_packet.get("scenario_b_emi", {}).get("emergency_runway_months"),
+            },
+            "scenario_c_wait": {
+                "verdict": decision_packet.get("scenario_c_wait", {}).get("verdict"),
+                "delay_days": decision_packet.get("scenario_c_wait", {}).get("delay_days"),
+                "emergency_runway_months": decision_packet.get("scenario_c_wait", {}).get("emergency_runway_months"),
+            },
+            "judgment_flip": decision_packet.get("judgment_flip"),
+            "evidence_ledger": decision_packet.get("evidence_ledger"),
+        }
+
+        # Extra safety sanitization
+        sanitized_json_str = SanitizerService.sanitize(json.dumps(safe_packet, indent=2))["sanitized_text"]
+
+        prompt = f"""Evaluate this Commitment Stress Test decision packet:
+
+{sanitized_json_str}
+"""
+        model = cls.get_model()
+        data, error = cls._call_provider(api_key, model, f"{cls.STRESS_TEST_SYSTEM_INSTRUCTION}\n\n{prompt}")
+
+        if error is not None:
+            return cls._generate_stress_test_fallback(decision_packet, valid_session_tx_ids, engine_status="OFFLINE_FALLBACK")
+
+        raw_json = cls._extract_answer_text(data)
+        if not raw_json:
+            return cls._generate_stress_test_fallback(decision_packet, valid_session_tx_ids, engine_status="OFFLINE_FALLBACK")
+
+        try:
+            parsed = json.loads(raw_json)
+        except (ValueError, TypeError):
+            return cls._generate_stress_test_fallback(decision_packet, valid_session_tx_ids, engine_status="OFFLINE_FALLBACK")
+
+        # Validate required schema keys
+        if not isinstance(parsed, dict) or "explanation" not in parsed:
+            return cls._generate_stress_test_fallback(decision_packet, valid_session_tx_ids, engine_status="OFFLINE_FALLBACK")
+
+        # Crucial Verification: verify cited transaction IDs against authenticated session!
+        raw_evidence_ids = parsed.get("evidence_transaction_ids") or []
+        if not isinstance(raw_evidence_ids, list):
+            raw_evidence_ids = []
+
+        # Filter: retain only IDs that actually exist in the session ledger
+        verified_evidence_ids = [str(tid) for tid in raw_evidence_ids if str(tid) in valid_session_tx_ids]
+
+        # If model hallucinated IDs, replace with genuine evidence IDs from decision packet
+        if not verified_evidence_ids:
+            verified_evidence_ids = [
+                str(tid) for tid in decision_packet.get("evidence_ledger", {}).get("all_cited_tx_ids", [])
+                if str(tid) in valid_session_tx_ids
+            ][:5]
+
+        # Check numeric claims
+        unverified_claims = cls._unverified_amount_claims(parsed, decision_packet)
+
+        return {
+            "engine_status": "GEMINI_LIVE",
+            "is_ai_generated": True,
+            "engine_label": "Live Gemini AI Decision Explanation",
+            "model": model,
+            "explanation": str(parsed.get("explanation", "")),
+            "financial_constraints": list(parsed.get("financial_constraints") or [])[:4],
+            "evidence_transaction_ids": verified_evidence_ids,
+            "assumptions": list(parsed.get("assumptions") or [])[:4],
+            "scenario_suggestions": list(parsed.get("scenario_suggestions") or [])[:2],
+            "unverified_amount_claims": unverified_claims,
+            "numeric_claims_verified": not unverified_claims,
+        }
+
+    @classmethod
+    def _generate_stress_test_fallback(
+        cls, decision_packet: Dict[str, Any], valid_session_tx_ids: set, engine_status: str = "OFFLINE_FALLBACK"
+    ) -> Dict[str, Any]:
+        """
+        Deterministic, evidence-checked fallback explanation for Commitment Stress Test.
+        Uses verified metrics from Python engine.
+        """
+        verdict = decision_packet.get("overall_verdict", "INSUFFICIENT DATA")
+        item = decision_packet.get("item_name", "commitment")
+        amt = decision_packet.get("proposed_amount", 0)
+        baseline = decision_packet.get("baseline", {})
+        runway = baseline.get("baseline_runway_months", 0.0)
+        scen_a = decision_packet.get("scenario_a_buy_now", {})
+        scen_b = decision_packet.get("scenario_b_emi", {})
+        scen_c = decision_packet.get("scenario_c_wait", {})
+        judgment_flip = decision_packet.get("judgment_flip", {})
+
+        if verdict == "INSUFFICIENT DATA":
+            explanation = (
+                f"Evaluation for {item} (₹{amt:,.2f}) is paused because required baseline income or liquid balance "
+                "data is incomplete. Provide a verified balance or import a complete monthly statement to enable reliable stress testing."
+            )
+            constraints = ["Missing verified opening liquid balance", "Unverified or irregular income stream"]
+            suggestions = [
+                "Verify your current savings account balance",
+                "Upload a statement showing at least 30 days of consistent transactions"
+            ]
+        elif verdict == "NOT SAFE":
+            explanation = (
+                f"Committing to {item} (₹{amt:,.2f}) currently poses high liquidity risk. "
+                f"{decision_packet.get('primary_reason', '')} "
+                "An immediate purchase or aggressive EMI would drain your emergency runway below safe thresholds."
+            )
+            constraints = [
+                f"Emergency runway reduces from {runway:.1f} to {scen_b.get('emergency_runway_months', 0.0):.1f} months",
+                f"Monthly commitment of ₹{scen_b.get('effective_monthly_commitment', 0):,.2f} consumes significant discretionary buffer"
+            ]
+            suggestions = [
+                decision_packet.get("judgment_flip", {}).get("flip_message", "Wait for your buffer to accumulate"),
+                "Consider extending loan tenure or reducing discretionary expenses"
+            ]
+        elif verdict == "CONDITIONAL":
+            explanation = (
+                f"Purchasing {item} (₹{amt:,.2f}) is feasible under strict budget adherence, but tightens your financial margin. "
+                f"{decision_packet.get('primary_reason', '')} "
+                "Any unexpected medical or living emergency during this period could cause cash-flow distress."
+            )
+            constraints = [
+                f"Post-commitment buffer drops to ₹{scen_b.get('remaining_safety_buffer', 0):,.2f}",
+                f"Runway settles at {scen_b.get('emergency_runway_months', 0.0):.1f} months (recommended baseline: >= 3.0 months)"
+            ]
+            suggestions = [
+                judgment_flip.get("flip_message", "A modest delay significantly strengthens your financial footing"),
+                "Cap daily non-essential UPI expenses during the initial instalment months"
+            ]
+        else: # SAFE
+            explanation = (
+                f"The proposed commitment for {item} (₹{amt:,.2f}) fits comfortably within your current financial cushion. "
+                f"Your post-commitment emergency runway remains resilient at {scen_b.get('emergency_runway_months', runway):.1f} months, "
+                "with the safety buffer fully preserved."
+            )
+            constraints = [
+                "Fixed monthly obligations remain fully covered",
+                f"Discretionary buffer comfortably absorbs ₹{scen_b.get('effective_monthly_commitment', 0):,.2f}/month"
+            ]
+            suggestions = [
+                "Ensure recurring auto-debit alert is configured on your primary account",
+                "Maintain your emergency floor in high-liquidity savings or liquid funds"
+            ]
+
+        # Genuine verified evidence IDs from packet
+        verified_evidence_ids = [
+            str(tid) for tid in decision_packet.get("evidence_ledger", {}).get("all_cited_tx_ids", [])
+            if str(tid) in valid_session_tx_ids
+        ][:5]
+
+        return {
+            "engine_status": engine_status,
+            "is_ai_generated": False,
+            "engine_label": "Deterministic Rule-Based Explanation (Evidence-Checked)",
+            "model": None,
+            "explanation": explanation,
+            "financial_constraints": constraints,
+            "evidence_transaction_ids": verified_evidence_ids,
+            "assumptions": [
+                "Predictable operating income assumed based on verified historical credits",
+                "Fixed commitments projected to persist on historical cadence",
+                "Discretionary spending assumed constant unless explicitly adjusted"
+            ],
+            "scenario_suggestions": suggestions,
+            "unverified_amount_claims": [],
+            "numeric_claims_verified": True,
         }
 

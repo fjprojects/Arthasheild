@@ -24,7 +24,7 @@ function firstWord(name = '') {
   return name.split(' ')[0];
 }
 
-export function PersonaOrb({ personas = [], selectedId, onSelect }) {
+export function PersonaOrb({ personas = [], selectedId, onSelect, hasConsented = true }) {
   const [pendingId, setPendingId] = useState(null);
   const [pulse, setPulse] = useState({ id: null, direction: 'forward', key: 0 });
   const [live, setLive] = useState(true);
@@ -99,10 +99,12 @@ export function PersonaOrb({ personas = [], selectedId, onSelect }) {
   const selectPersona = useCallback(
     (persona) => {
       if (!persona) return;
-      setPendingId(persona.id);
+      if (hasConsented) {
+        setPendingId(persona.id);
+      }
       onSelect?.(persona.id);
     },
-    [onSelect],
+    [hasConsented, onSelect],
   );
 
   const handleKeyDown = useCallback(
@@ -203,7 +205,8 @@ export function PersonaOrb({ personas = [], selectedId, onSelect }) {
                 onKeyDown={(event) => handleKeyDown(event, index)}
                 data-pulse={pulse.id === persona.id && pulse.key > 0 ? 'true' : 'false'}
                 className="persona-node"
-                title={persona.name}
+                aria-disabled={!hasConsented ? 'true' : undefined}
+                title={!hasConsented ? `${persona.name} (Consent required)` : persona.name}
               >
                 <span className="persona-orb" aria-hidden="true">
                   <span className="persona-orb__halo" />

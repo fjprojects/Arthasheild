@@ -27,6 +27,11 @@ from .views import (
     SpendingPatternAnalyzerView,
     # Task 17: Imported-session overview
     ImportedSessionOverviewView,
+    EvidenceBriefingView,
+    # Commitment Stress Test & Judgment Flip
+    CommitmentStressTestView,
+    CommitmentStressTestExplainView,
+    TransactionCorrectionView,
 )
 
 urlpatterns = [
@@ -57,4 +62,10 @@ urlpatterns = [
     path('insights/spending-patterns/', SpendingPatternAnalyzerView.as_view(), name='spending-patterns'),
     # Task 17: Imported-session snapshot/overview
     path('insights/imported-overview/', ImportedSessionOverviewView.as_view(), name='imported-overview'),
+    # Evidence-Based Financial Insights Briefing
+    path('insights/evidence-briefing/', EvidenceBriefingView.as_view(), name='evidence-briefing'),
+    # Commitment Stress Test & Judgment Flip
+    path('analytics/commitment-stress-test/', CommitmentStressTestView.as_view(), name='commitment-stress-test'),
+    path('analytics/commitment-stress-test/explain/', CommitmentStressTestExplainView.as_view(), name='commitment-stress-test-explain'),
+    path('insights/correct-transaction/', TransactionCorrectionView.as_view(), name='correct-transaction'),
 ]
