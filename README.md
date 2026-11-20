@@ -397,6 +397,14 @@ strings.
 
 `render.yaml` is included. Connect the repository to Render, and set:
 
+Render terminates public TLS at its edge and forwards requests to the service
+over its internal network. In production, Django trusts Render's
+`X-Forwarded-Proto: https` signal so request security checks recognise the
+original HTTPS connection. The backend also emits a one-day HSTS policy as a
+cautious initial setting; subdomain coverage and browser preload are deliberately
+not enabled. Render itself handles the public HTTP-to-HTTPS redirect, so the
+application does not add a second redirect at the proxy hop.
+
 | Variable | Required | Notes |
 |---|---|---|
 | `DJANGO_SECRET_KEY` | yes | Generate a random value. |
