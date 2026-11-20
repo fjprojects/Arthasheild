@@ -183,7 +183,7 @@ export default function TransactionTable({
             )}
           </div>
           <p className="text-[11px] font-mono text-[#AAAAAA] mt-1 m-0">
-            Stored locally with pseudonymized identifiers. Inline editing supported for human categorization corrections.
+            Stored server-side in this session's ledger with sanitized labels. Inline editing supports human categorization corrections.
           </p>
         </div>
 
