@@ -726,3 +726,47 @@ class CommitmentStressTestIntegrationAndSecurityTests(TestCase):
         self.assertFalse(result["is_ai_generated"])
         self.assertNotIn("999999", json.dumps(result))
 
+    # 25. Stress-test Gemini receives trusted instructions separately from the data packet.
+    def test_25_stress_ai_uses_separate_system_instruction(self):
+        packet = {
+            "overall_verdict": "CONDITIONAL",
+            "item_name": "Studio Monitor",
+            "proposed_amount": 40000.0,
+            "baseline": {"baseline_runway_months": 4.0},
+            "scenario_b_emi": {
+                "effective_monthly_commitment": 7000.0,
+                "emergency_runway_months": 3.5,
+                "remaining_safety_buffer": 18000.0,
+            },
+            "evidence_ledger": {"all_cited_tx_ids": [str(self.salary_tx.id)]},
+        }
+        valid_answer = {
+            "explanation": "The EMI option leaves less room for unexpected expenses.",
+            "financial_constraints": ["Preserve the emergency buffer."],
+            "evidence_transaction_ids": [str(self.salary_tx.id)],
+            "assumptions": ["Verified income continues."],
+            "scenario_suggestions": ["Compare with waiting before committing."],
+        }
+        provider_data = {
+            "candidates": [{
+                "content": {"parts": [{"text": json.dumps(valid_answer)}]}
+            }]
+        }
+
+        with patch.object(AdvisorService, "get_api_key", return_value="synthetic_test_key"):
+            with patch("requests.post") as mock_post:
+                mock_post.return_value.status_code = 200
+                mock_post.return_value.json.return_value = provider_data
+                result = AdvisorService.explain_commitment_stress_test(
+                    packet, {str(self.salary_tx.id), str(self.rent_tx.id)}
+                )
+                body = mock_post.call_args[1]["json"]
+
+        self.assertTrue(result["is_ai_generated"])
+        system_text = body["systemInstruction"]["parts"][0]["text"]
+        user_text = body["contents"][0]["parts"][0]["text"]
+        self.assertIn("INPUT INTEGRITY", system_text)
+        self.assertNotIn("Studio Monitor", system_text)
+        self.assertIn("Studio Monitor", user_text)
+        self.assertNotIn("synthetic_test_key", json.dumps(body))
+
