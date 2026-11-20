@@ -82,6 +82,7 @@ class AdvisorService:
         re.compile(r"\b[A-Z]{3}\d{7}\b", re.IGNORECASE),
         re.compile(r"\b(?:A/C|account(?:\s*(?:number|no\.?))?|acct(?:\s*(?:number|no\.?))?)\s*[:#-]?\s*[0-9X*-]{8,24}\b", re.IGNORECASE),
         re.compile(r"\b(?:account holder|customer name|beneficiary(?: name)?|payee name)\s*:\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b", re.IGNORECASE),
+        re.compile(r"\b(?:customer|cust|cif)\s*(?:id|no\.?)\s*[:#-]?\s*[A-Z0-9-]{4,32}\b", re.IGNORECASE),
     )
 
     SYSTEM_INSTRUCTION = """
@@ -438,9 +439,10 @@ Respond in strict JSON with the following keys:
         # Fail closed if any recognizable identifier survives the full
         # sanitizer pipeline. Name detection remains heuristic; no claim of
         # perfect identification is made.
-        if cls._contains_residual_pii(outbound_text):
+        metrics_text = json.dumps(computed_metrics or {}, sort_keys=True, default=str)
+        if cls._contains_residual_pii(outbound_text) or cls._contains_residual_pii(metrics_text):
             logger.warning(
-                "Outbound text contained a residual personal identifier; using local heuristics."
+                "Provider-bound statement data contained a residual personal identifier; using local heuristics."
             )
             return cls._generate_heuristic_response(sanitized_text, computed_metrics)
 
@@ -470,7 +472,12 @@ SANITIZED TRANSACTION & DOCUMENT TEXT:
             logger.warning("Gemini response was not a JSON object.")
             return cls._generate_heuristic_response(sanitized_text, computed_metrics)
 
-        block_reason = (data.get("promptFeedback") or {}).get("blockReason")
+        prompt_feedback = data.get("promptFeedback")
+        block_reason = (
+            prompt_feedback.get("blockReason")
+            if isinstance(prompt_feedback, dict)
+            else None
+        )
         if block_reason:
             logger.warning("Gemini request was blocked (%s).", block_reason)
             return cls._generate_heuristic_response(sanitized_text, computed_metrics)
