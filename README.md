@@ -1,6 +1,10 @@
 # ArthaShield (FinGuard AI)
 ### Privacy-first financial companion for Arthaton 2026
 
+## Demo
+
+[Watch the ArthaShield demo on YouTube](https://youtu.be/oXG0cLqUp08)
+
 [![Hackathon](https://img.shields.io/badge/Arthaton-2026-emerald.svg)](https://arthaton2026.dev)
 [![Architecture](https://img.shields.io/badge/Architecture-Tokenized%20PII%20%2B%20Deterministic%20Math-blue.svg)]()
 [![Stack](https://img.shields.io/badge/Stack-React%20%7C%20Django%20%7C%20Postgres-indigo.svg)]()
@@ -17,7 +21,7 @@ Three things make personal finance analysis hard:
 2. **Documents written in legalese.** A statement or loan letter buries a 18% GST line, a processing fee and a reference number inside prose.
 3. **Aggregators that demand the keys to your money.** Most finance apps ask for net-banking credentials or scrape an SMS inbox, then retain what they read.
 
-ArthaShield takes a different route: the user's own statement is parsed **locally**, identifiers are **tokenized before anything leaves the server**, and every number on the dashboard is produced by **deterministic Python** — never by a language model.
+ArthaShield takes a different route: the user's statement is uploaded to the ArthaShield Django backend for parsing; identifiers are **tokenized on the server before any optional external AI processing**, and every number on the dashboard is produced by **deterministic Python** — never by a language model.
 
 ---
 
@@ -194,7 +198,7 @@ The UI is then available at `http://localhost:5173/`.
 ### 4.3 Tests and production build
 
 ```bash
-# Backend: the full automated suite (612 tests)
+# Backend: the full automated suite
 cd backend
 python manage.py test api advisor analytics sanitizer
 
@@ -319,10 +323,10 @@ input is missing instead of inventing a number.
 
 ## 7. The AI layer, precisely
 
-* **Model:** `gemini-3.6-flash` by default (a current stable model with structured
-  JSON output), overridable with `GEMINI_MODEL`. The previous default,
-  `gemini-2.5-flash`, is deprecated and is shut down by the provider on
-  1 December 2026, so it must not be pinned.
+* **Model:** configured through `GEMINI_MODEL`; the repository's example
+  configuration defaults to `gemini-3.6-flash`. The model must support structured
+  JSON output. The previous default, `gemini-2.5-flash`, is deprecated and is
+  scheduled to shut down by the provider on 1 December 2026, so it must not be pinned.
 * **Key:** read from `GEMINI_API_KEY` at request time. It is never stored,
   logged or returned.
 * **Input:** sanitized text plus the deterministic metrics. Nothing else.
