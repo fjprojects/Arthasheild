@@ -100,14 +100,13 @@ export default function ConsentModal({ onConsentGiven }) {
               or storing unredacted bank statements.
             </p>
             <p className="m-0 font-sans text-[11px] leading-relaxed text-[#A0A0A0]">
-              Explore using built-in synthetic personas or upload a statement export. Uploaded statements
-              undergo client-side &amp; server-side identifier redaction before any optional AI advisory.
+              Explore using built-in synthetic personas or upload a statement export. Uploaded statements are processed by the ArthaShield backend, where recognizable identifiers are redacted before any optional AI advisory.
             </p>
           </div>
 
           <details className="group border border-[#202020] bg-[#070707] p-3 text-xs">
             <summary className="flex cursor-pointer items-center justify-between font-mono text-[11px] font-bold uppercase tracking-wider text-white select-none">
-              <span>View Privacy Architecture &amp; Guarantees (3 Principles)</span>
+              <span>View Privacy Controls &amp; Processing Details (3 Principles)</span>
               <span className="text-[#888888] transition-transform duration-200 group-open:rotate-180">▼</span>
             </summary>
             <div className="mt-3 divide-y divide-[#1A1A1A] border-t border-[#1A1A1A] pt-1">

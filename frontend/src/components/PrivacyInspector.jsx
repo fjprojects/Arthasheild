@@ -267,10 +267,10 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
           <div className="flex items-center space-x-2">
             <CheckCircle2 className="w-4 h-4 text-white" />
             <span>
-              Ingestion complete: {importResult.imported} transaction(s) stored securely. {importResult.skipped_duplicates} duplicate(s) prevented via SHA-256 fingerprint.
+              Ingestion complete: {importResult.imported} transaction(s) saved to this session ledger. {importResult.skipped_duplicates} duplicate(s) prevented via SHA-256 fingerprint.
             </span>
           </div>
-          <span className="text-[9px] uppercase border border-white bg-black px-2 py-0.5 font-bold">Encrypted DB Stored</span>
+          <span className="text-[9px] uppercase border border-white bg-black px-2 py-0.5 font-bold">Session Ledger Saved</span>
         </div>
       )}
 
