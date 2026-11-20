@@ -295,6 +295,19 @@ if IS_PRODUCTION:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
+    # Render terminates public TLS at its edge and forwards the original
+    # scheme in X-Forwarded-Proto. Trust this header only in production so
+    # Django's request.is_secure(), CSRF checks and security middleware see
+    # the browser-facing HTTPS connection rather than the internal HTTP hop.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+    # Start with a short HSTS lifetime. Do not enable includeSubDomains or
+    # preload until every relevant subdomain has been verified as HTTPS-only.
+    SECURE_HSTS_SECONDS = 86400
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+
 
 # ============================================================
 # TEST ENVIRONMENT
