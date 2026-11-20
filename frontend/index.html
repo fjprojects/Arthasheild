@@ -1,17 +1,53 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <!-- Browser Tab Title -->
+    <title>ArthaShield — Privacy-First Financial Intelligence &amp; Privacy Inspector</title>
+
+    <!-- Search Engine & Platform Meta -->
     <meta
       name="description"
-      content="ArthaShield: a privacy-first financial companion that parses your own bank statement locally, tokenizes personal identifiers before anything leaves the server, and computes every figure with deterministic Python."
+      content="ArthaShield: Zero-credential financial intelligence and privacy inspector. Parse bank statements locally, tokenize sensitive identifiers, and analyze finances with deterministic algorithms and DPDP-compliant safeguards."
     />
-    <title>ArthaShield — Privacy-First Financial Companion</title>
+    <meta name="theme-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Favicons & App Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Open Graph (Facebook, LinkedIn, Discord, Slack) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ArthaShield" />
+    <meta property="og:title" content="ArthaShield — Privacy-First Financial Intelligence" />
+    <meta
+      property="og:description"
+      content="Deterministic financial intelligence with zero credential disclosure. Local PII sanitization, subscription leakage detection, and DPDP-compliant privacy audit ledger."
+    />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ArthaShield 2.0 — Privacy-First Financial Companion" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ArthaShield — Privacy-First Financial Intelligence" />
+    <meta
+      name="twitter:description"
+      content="Deterministic financial intelligence with zero credential disclosure. Local PII sanitization, subscription leakage detection, and DPDP-compliant privacy audit ledger."
+    />
+    <meta name="twitter:image" content="/og-image.png" />
+    <meta name="twitter:image:alt" content="ArthaShield 2.0 — Privacy-First Financial Companion" />
   </head>
-  <body>
+  <body class="bg-black text-white antialiased selection:bg-white selection:text-black">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
