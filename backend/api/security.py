@@ -1,7 +1,5 @@
 import hashlib
 from typing import Tuple, Optional
-import hashlib
-from typing import Tuple, Optional
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
