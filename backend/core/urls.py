@@ -7,7 +7,7 @@ def health_check(request):
         "status": "healthy",
         "service": "ArthaShield Backend API",
         "version": "1.0.0",
-        "privacy_mode": "ZERO_KNOWLEDGE_PII_PROTECTED"
+        "privacy_mode": "SERVER_SIDE_PII_REDACTION"
     })
 
 urlpatterns = [
