@@ -63,9 +63,9 @@ class AdvisorService:
         "refund", "emi", "price", "buffer", "allowance",
     )
     NON_MONETARY_KEY_TERMS = (
-        "pct", "percent", "rate", "ratio", "month", "day", "count", "score",
-        "year", "tenure", "duration", "threshold", "grade", "confidence",
-        "runway", "severity",
+        "_pct", "percent", "_rate", "_ratio", "_count", "_month", "_day",
+        "_year", "_score", "_grade", "_confidence", "_tenure", "_duration",
+        "_threshold", "runway", "severity",
     )
 
     # Defense-in-depth egress checks. These run after the normal sanitizer and
