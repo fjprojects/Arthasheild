@@ -18,10 +18,9 @@ class AdvisorService:
 
     #: Model used for the optional live analysis. The value is overridable with
     #: GEMINI_MODEL so a deployment can pin a currently supported model without
-    #: a code change. The default is a currently supported, stable Flash model
-    #: (Gemini 3.6 Flash) that supports structured JSON output.
-    #: NOTE: Gemini 2.5 Flash is deprecated and is shut down on 2026-12-01.
-    DEFAULT_MODEL = "gemini-3.6-flash"
+    #: a code change. Gemini 3.8 Flash is the current stable Flash default and
+    #: supports the JSON generation and thinking controls used below.
+    DEFAULT_MODEL = "gemini-3.8-flash"
 
     #: API versions tried in order. ``v1`` is the current stable version and
     #: ``v1beta`` is kept as a fallback for accounts that are not yet served by
