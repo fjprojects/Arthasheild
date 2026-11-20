@@ -20,16 +20,18 @@ function computeEmiMetrics({
   nominalApr = 0.0,
   monthlyFee = 199.0,
   upfrontFee = 0.0,
-  discretionaryBuffer = 14000
+  discretionaryBuffer = null
 }) {
-  const p = Math.max(0, Number(price) || 0);
-  const dp = Math.max(0, Math.min(Number(downPayment) || 0, p));
+  const p = price === '' ? 0 : Math.max(0, Number(price) || 0);
+  const dp = downPayment === '' ? 0 : Math.max(0, Math.min(Number(downPayment) || 0, p));
   const principal = Math.max(0, p - dp);
-  const n = Math.max(1, parseInt(tenure, 10) || 12);
-  const nominalRate = Math.max(0, Number(nominalApr) || 0);
-  const convFee = Math.max(0, Number(monthlyFee) || 0);
-  const upFee = Math.max(0, Number(upfrontFee) || 0);
-  const discBuffer = Math.max(1, Number(discretionaryBuffer) || 14000);
+  const n = tenure === '' ? 12 : Math.max(1, parseInt(tenure, 10) || 12);
+  const nominalRate = nominalApr === '' ? 0 : Math.max(0, Number(nominalApr) || 0);
+  const convFee = monthlyFee === '' ? 0 : Math.max(0, Number(monthlyFee) || 0);
+  const upFee = upfrontFee === '' ? 0 : Math.max(0, Number(upfrontFee) || 0);
+  
+  const hasBuffer = discretionaryBuffer !== null && discretionaryBuffer !== undefined && !isNaN(Number(discretionaryBuffer)) && Number(discretionaryBuffer) > 0;
+  const discBuffer = hasBuffer ? Number(discretionaryBuffer) : null;
 
   let baseMonthlyEmi = 0;
   let totalInterest = 0;
@@ -53,20 +55,26 @@ function computeEmiMetrics({
   const totalRepayment = (baseMonthlyEmi * n) + (monthlyFeeWithGst * n);
   const totalOutflow = dp + totalRepayment + upfrontFeeWithGst;
 
-  const pctOfDiscretionaryUsed = Math.round(((effectiveMonthlyCost / discBuffer) * 100) * 10) / 10;
+  let pctOfDiscretionaryUsed = null;
+  let status = 'UNVERIFIED BUFFER';
+  let explanation = 'Discretionary buffer requires verified statement inflow. Affordability risk cannot be assessed without verified income.';
+  let isViable = null;
 
-  let status = 'LOW RISK';
-  let explanation = 'LOW RISK: Easily fits within your current discretionary cashflow.';
-  let isViable = true;
-
-  if (pctOfDiscretionaryUsed > 40) {
-    status = 'HIGH RISK';
-    explanation = 'HIGH RISK: Would consume over 40% of your free monthly cash buffer.';
-    isViable = false;
-  } else if (pctOfDiscretionaryUsed > 25) {
-    status = 'MODERATE';
-    explanation = 'MODERATE: Manageable, but substantially reduces your buffer for emergency spending.';
-    isViable = true;
+  if (hasBuffer && discBuffer > 0) {
+    pctOfDiscretionaryUsed = Math.round(((effectiveMonthlyCost / discBuffer) * 100) * 10) / 10;
+    if (pctOfDiscretionaryUsed > 40) {
+      status = 'HIGH RISK';
+      explanation = 'HIGH RISK: Would consume over 40% of your free monthly cash buffer.';
+      isViable = false;
+    } else if (pctOfDiscretionaryUsed > 25) {
+      status = 'MODERATE';
+      explanation = 'MODERATE: Manageable, but substantially reduces your buffer for emergency spending.';
+      isViable = true;
+    } else {
+      status = 'LOW RISK';
+      explanation = 'LOW RISK: Easily fits within your current discretionary cashflow.';
+      isViable = true;
+    }
   }
 
   return {
@@ -91,18 +99,35 @@ function computeEmiMetrics({
   };
 }
 
-export default function EmiSimulator({ discretionaryBuffer = 14000 }) {
+export default function EmiSimulator({ discretionaryBuffer = null }) {
   const [itemName, setItemName] = useState('Flagship Smartphone');
-  const [price, setPrice] = useState(65000);
+  const [price, setPrice] = useState('65000');
   const [tenure, setTenure] = useState(12);
-  const [downPayment, setDownPayment] = useState(0);
-  const [nominalApr, setNominalApr] = useState(0.0);
-  const [monthlyFee, setMonthlyFee] = useState(199.0);
-  const [upfrontFee, setUpfrontFee] = useState(0);
+  const [downPayment, setDownPayment] = useState('0');
+  const [nominalApr, setNominalApr] = useState('0');
+  const [monthlyFee, setMonthlyFee] = useState('199');
+  const [upfrontFee, setUpfrontFee] = useState('0');
   const [simulation, setSimulation] = useState(null);
   const [simulationSignature, setSimulationSignature] = useState(null);
   const [loading, setLoading] = useState(false);
   const requestSeq = useRef(0);
+
+  const handleCleanNumber = (setter, maxVal) => (e) => {
+    const val = e.target.value;
+    if (val === '') {
+      setter('');
+      return;
+    }
+    const cleaned = val.replace(/^0+(?=\d)/, '');
+    const num = Number(cleaned);
+    if (!isNaN(num) && num >= 0) {
+      if (maxVal !== undefined && num > maxVal) {
+        setter(String(maxVal));
+      } else {
+        setter(cleaned);
+      }
+    }
+  };
 
   // Synchronous fallback for non-APR display values only.
   const localCalc = useMemo(() => {
@@ -127,7 +152,7 @@ export default function EmiSimulator({ discretionaryBuffer = 14000 }) {
     nominalApr: Number(nominalApr) || 0,
     monthlyFee: Number(monthlyFee) || 0,
     upfrontFee: Number(upfrontFee) || 0,
-    discretionaryBuffer: Number(discretionaryBuffer) || 14000,
+    discretionaryBuffer: discretionaryBuffer !== null ? Number(discretionaryBuffer) : null,
   }), [itemName, price, tenure, downPayment, nominalApr, monthlyFee, upfrontFee, discretionaryBuffer]);
 
   // Debounced authoritative calculation (backend XIRR).
@@ -272,7 +297,7 @@ export default function EmiSimulator({ discretionaryBuffer = 14000 }) {
         </div>
 
         <div className="text-[10px] font-mono uppercase px-3 py-1.5 border border-[#202020] bg-[#0A0A0A] text-white">
-          Discretionary Floor: ₹{Number(discretionaryBuffer).toLocaleString('en-IN')}/MO
+          Discretionary Floor: {discretionaryBuffer !== null && discretionaryBuffer !== undefined && !isNaN(Number(discretionaryBuffer)) ? `₹${Number(discretionaryBuffer).toLocaleString('en-IN')}/MO` : 'UNVERIFIED / DATASET INFLOW REQUIRED'}
         </div>
       </Card>
 
@@ -322,10 +347,10 @@ export default function EmiSimulator({ discretionaryBuffer = 14000 }) {
             <input
               type="number"
               min="0"
-              max={price}
+              max={Number(price) || 0}
               step="1000"
               value={downPayment}
-              onChange={(e) => setDownPayment(Math.max(0, Math.min(Number(price) || 0, Number(e.target.value) || 0)))}
+              onChange={handleCleanNumber(setDownPayment, Number(price) || 0)}
               className="w-full bg-[#050505] border border-[#202020] px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white font-mono"
             />
           </div>
@@ -365,7 +390,7 @@ export default function EmiSimulator({ discretionaryBuffer = 14000 }) {
                 max="48"
                 step="0.5"
                 value={nominalApr}
-                onChange={(e) => setNominalApr(Math.max(0, Number(e.target.value) || 0))}
+                onChange={handleCleanNumber(setNominalApr, 48)}
                 className="w-full bg-[#050505] border border-[#202020] px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white font-mono"
               />
             </div>
@@ -378,7 +403,7 @@ export default function EmiSimulator({ discretionaryBuffer = 14000 }) {
                 max="5000"
                 step="10"
                 value={monthlyFee}
-                onChange={(e) => setMonthlyFee(Math.max(0, Number(e.target.value) || 0))}
+                onChange={handleCleanNumber(setMonthlyFee, 5000)}
                 className="w-full bg-[#050505] border border-[#202020] px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white font-mono"
               />
             </div>
@@ -391,7 +416,7 @@ export default function EmiSimulator({ discretionaryBuffer = 14000 }) {
                 max="100000"
                 step="100"
                 value={upfrontFee}
-                onChange={(e) => setUpfrontFee(Math.max(0, Number(e.target.value) || 0))}
+                onChange={handleCleanNumber(setUpfrontFee, 100000)}
                 className="w-full bg-[#050505] border border-[#202020] px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white font-mono"
               />
             </div>
@@ -438,7 +463,7 @@ export default function EmiSimulator({ discretionaryBuffer = 14000 }) {
 
               <div className="text-right sm:border-l sm:border-[#202020] sm:pl-8">
                 <span className="text-[9px] font-mono uppercase text-[#AAAAAA] tracking-widest block">
-                  True Monthly Commitment
+                  Estimated Monthly Outflow
                 </span>
                 <div className="text-4xl sm:text-5xl font-mono tracking-tighter text-white font-bold mt-1">
                   <CrypticText text={formatInr(monthlyCommitment)} triggerKey={monthlyCommitment} />
@@ -498,6 +523,32 @@ export default function EmiSimulator({ discretionaryBuffer = 14000 }) {
                 </>
               ) : (
                 <p className="text-[#AAAAAA] m-0">Awaiting backend cash-flow calculation…</p>
+              )}
+            </div>
+
+            {/* Dynamic Educational Borrowing Cost Explanation */}
+            <div className="border border-[#202020] bg-[#070707] p-3 space-y-1.5 font-mono text-[10px]">
+              {Number(nominalApr || 0) === 0 ? (
+                <>
+                  <span className="text-white font-bold block uppercase tracking-wider">
+                    Why does 0% Stated APR show a positive effective cost?
+                  </span>
+                  <p className="m-0 leading-relaxed text-[#AAAAAA]">
+                    Even when nominal interest is advertised as 0% (subvention discount), mandatory monthly processing fees (e.g. ₹{monthlyFee || 0}/mo) and 18% GST convert the financing into a positive effective borrowing cost under XIRR cash-flow discounting.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <span className="text-white font-bold block uppercase tracking-wider">
+                    Nominal vs. Effective Annual Borrowing Cost ({formatNumber(nominalApr)}% Stated)
+                  </span>
+                  <p className="m-0 leading-relaxed text-[#AAAAAA]">
+                    The stated nominal rate ({formatNumber(nominalApr)}%) only reflects the base headline interest applied to the loan without accounting for compounding schedules, upfront deductions, or ancillary fees.
+                  </p>
+                  <p className="m-0 leading-relaxed text-[#AAAAAA]">
+                    The effective annual borrowing cost {aprAvailable ? `(${formatNumber(effectiveApr)}%)` : ''} is derived via cash-flow discounting (XIRR). It reveals the true annualized credit cost by accounting for monthly installment timing, compounding, {Number(upfrontFee || 0) > 0 ? `upfront processing fees (₹${formatNumber(upfrontFee)}), ` : ''}{Number(monthlyFee || 0) > 0 ? `recurring administrative fees (₹${formatNumber(monthlyFee)}/mo), ` : ''}and mandatory 18% GST on all service fees.
+                  </p>
+                </>
               )}
             </div>
 

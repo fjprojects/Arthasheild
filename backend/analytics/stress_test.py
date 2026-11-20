@@ -29,6 +29,9 @@ from api.insights import (
     detect_subscriptions,
     classify_credit,
     classify_debit,
+    classify_recurring_payment,
+    canonical_category_key,
+    RECURRING_PROBABLE,
 )
 
 
@@ -84,13 +87,21 @@ def run_commitment_stress_test(
     delay = max(0, min(180, int(delay_days or 0)))
     disc_reduction = _clamp_decimal(_as_decimal(discretionary_reduction_pct), Decimal('0'), Decimal('100')) / Decimal('100')
 
-    # 2. Gather verified baseline data from session ledger
-    qs = Transaction.objects.filter(session_id=session_id)
-    if not include_persona:
-        qs = qs.filter(source_type='import')
+    # 2. Gather verified baseline data from exactly one selected dataset.
+    # A persona-created snapshot belongs to the persona scenario and is never
+    # substituted into an imported-statement analysis (and vice versa).
+    source_type = (
+        Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+    )
+    qs = Transaction.objects.filter(session_id=session_id, source_type=source_type)
     txs = list(qs.order_by('transaction_date'))
 
-    snapshot = FinancialSnapshot.objects.filter(session_id=session_id).order_by('-created_at').first()
+    snapshot = (
+        FinancialSnapshot.objects.filter(session_id=session_id)
+        .order_by('-created_at')
+        .first()
+        if include_persona else None
+    )
 
     # Determine baseline liquid balance
     balance_is_supported = False
@@ -100,12 +111,8 @@ def run_commitment_stress_test(
     elif snapshot and snapshot.liquid_balance > 0:
         liquid_balance = snapshot.liquid_balance
         balance_is_supported = True
-    elif txs:
-        # Check if last transaction has available_balance
-        last_tx = txs[-1]
-        # Check snapshot or budget
-        liquid_balance = Decimal('0')
     else:
+        # Imported statements carry no verified current balance in this schema.
         liquid_balance = Decimal('0')
 
     # Compute baseline income and expenses from existing monthly_budget engine
@@ -118,8 +125,14 @@ def run_commitment_stress_test(
 
     budget = monthly_budget(session_id, budget_year, budget_month, include_persona)
 
-    # Operating income: earned income + investment yield only (conservative; unclassified excluded)
-    operating_income = _to_dec(budget.get('operating_income', '0'))
+    # Predictable operating income uses confirmed evidence only. Probable
+    # business/freelance receipts are surfaced but withheld from survival math;
+    # unclassified credits remain excluded.
+    confirmed_operating_income = _to_dec(
+        budget.get('confirmed_operating_income', budget.get('operating_income', '0'))
+    )
+    probable_operating_income = _to_dec(budget.get('probable_operating_income', '0'))
+    operating_income = confirmed_operating_income
     earned_income = _to_dec(budget.get('earned_income', '0'))
     total_credits = _to_dec(budget.get('total_credits', '0'))
     unclassified_credits = _to_dec(budget.get('credit_breakdown', {}).get('unclassified', '0'))
@@ -131,6 +144,7 @@ def run_commitment_stress_test(
 
     confirmed_fixed_commitments = Decimal('0')
     confirmed_subscriptions = Decimal('0')
+    probable_subscriptions_under_review = Decimal('0')
     commitment_evidence_ids = []
     income_evidence_ids = []
     active_session_tx_ids = {str(t.id) for t in txs}
@@ -162,26 +176,42 @@ def run_commitment_stress_test(
         elif s.get('is_potential_leakage'):
             confirmed_subscriptions += cost
             commitment_evidence_ids.extend(_verified_candidate_ids(s))
+        elif s.get('confidence') == RECURRING_PROBABLE:
+            probable_subscriptions_under_review += cost
+            commitment_evidence_ids.extend(_verified_candidate_ids(s))
 
-    # Fallback to snapshot fixed commitments or explicit recurring debits if subs detector requires multiple cadences
+    # Fallback to snapshot fixed commitments or explicit contractual debits if subs detector requires multiple cadences
     if confirmed_fixed_commitments == 0:
-        explicit_recurring_sum = sum(
-            t.amount for t in txs if t.transaction_type == 'DEBIT' and t.is_recurring
-        )
-        if explicit_recurring_sum > 0:
-            confirmed_fixed_commitments = explicit_recurring_sum
+        fixed_contractual_sum = Decimal('0')
+        discretionary_recurring_sum = Decimal('0')
+        for t in txs:
+            if t.transaction_type == 'DEBIT' and t.is_recurring:
+                p_type = classify_recurring_payment(t.normalized_merchant, t.category)
+                cat_key = canonical_category_key(t.category)
+                if p_type in ('rent', 'emi_or_loan', 'utility', 'insurance') or cat_key in ('rent_housing', 'emi'):
+                    fixed_contractual_sum += t.amount
+                else:
+                    discretionary_recurring_sum += t.amount
+
+        if fixed_contractual_sum > 0:
+            confirmed_fixed_commitments = fixed_contractual_sum
         elif snapshot and snapshot.fixed_commitments > 0:
             confirmed_fixed_commitments = snapshot.fixed_commitments
+
+        if discretionary_recurring_sum > 0 and probable_subscriptions_under_review == 0:
+            probable_subscriptions_under_review = discretionary_recurring_sum
 
     for t in txs:
         if t.transaction_type == 'DEBIT' and t.is_recurring:
             commitment_evidence_ids.append(str(t.id))
 
-    # Extract income evidence transactions
+    # Extract income evidence transactions. Probable business/freelance receipts
+    # are cited as review evidence only after they are confirmed; they are not
+    # counted as predictable income above.
     for tx in txs:
         if tx.transaction_type == 'CREDIT':
             c_info = classify_credit(tx.normalized_merchant)
-            if c_info['is_operating_income']:
+            if c_info['is_operating_income'] and not c_info.get('requires_review'):
                 income_evidence_ids.append(str(tx.id))
 
     # Net monthly living expenses
@@ -219,7 +249,7 @@ def run_commitment_stress_test(
         insufficient_reasons.append("Predictable operating income is missing or irregular.")
     if len(txs) == 0 and not snapshot:
         data_sufficient = False
-        insufficient_reasons.append("No transaction history available in session.")
+        insufficient_reasons.append("No transaction history available in the selected dataset.")
 
     # 3. Simulate Scenarios
     # SCENARIO A: BUY NOW (Lump Sum)
@@ -482,6 +512,8 @@ def run_commitment_stress_test(
     return {
         "item_name": item_name,
         "commitment_type": commitment_type,
+        "dataset_source": "PERSONA_SCENARIO" if include_persona else "IMPORTED_STATEMENT",
+        "dataset_transaction_count": len(txs),
         "proposed_amount": _money(p_dec),
         "down_payment": _money(dp_dec),
         "tenure_months": tenure,
@@ -494,9 +526,12 @@ def run_commitment_stress_test(
             "balance_verified": balance_is_supported,
             "predictable_monthly_income": _money(operating_income),
             "earned_income": _money(earned_income),
+            "probable_income_withheld": _money(probable_operating_income),
             "unclassified_credits_withheld": _money(unclassified_credits),
             "existing_fixed_obligations": _money(confirmed_fixed_commitments),
             "confirmed_subscriptions": _money(confirmed_subscriptions),
+            "probable_subscriptions_under_review": _money(probable_subscriptions_under_review),
+            "total_recurring_outflow": _money(confirmed_fixed_commitments + confirmed_subscriptions + probable_subscriptions_under_review),
             "baseline_living_expenses": _money(net_living_expenses),
             "monthly_discretionary_buffer": _money(monthly_discretionary),
             "safety_buffer_floor": _money(safety_buffer_floor),

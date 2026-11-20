@@ -19,8 +19,10 @@ import LeakageRadar from './components/LeakageRadar';
 import EmiSimulator from './components/EmiSimulator';
 import CommitmentStressTest from './components/CommitmentStressTest';
 import TransactionTable from './components/TransactionTable';
+import PrivacyAuditTrail from './components/PrivacyAuditTrail';
 import InsightsBriefing from './components/InsightsBriefing';
 import ConsentModal from './components/ConsentModal';
+import BackToTop from './components/ui/BackToTop';
 import { Card } from './components/ui/Card';
 
 // Cinematic & Interactive Monochrome Engines
@@ -38,7 +40,7 @@ const PAGE_TITLES = {
   LEAKAGE_RADAR: 'Leakage Radar',
   STRESS_TEST: 'Commitment Stress Test',
   EMI_SIMULATOR: 'EMI Reality Check',
-  AUDIT_LEDGER: 'Audit Ledger',
+  AUDIT_LEDGER: 'Audit & Transaction Ledger',
 };
 
 export default function App() {
@@ -56,6 +58,16 @@ export default function App() {
   const [healthMetrics, setHealthMetrics] = useState(null);
   const [safeToSpend, setSafeToSpend] = useState(null);
   const [activeTab, setActiveTab] = useState('OVERVIEW');
+  const [ledgerSubTab, setLedgerSubTab] = useState('TRANSACTIONS'); // 'TRANSACTIONS' | 'PRIVACY_TRAIL'
+
+  const handleTabSelect = (tabKey) => {
+    setActiveTab(tabKey);
+    const container = document.getElementById('main-scroll-container');
+    if (container) {
+      container.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const [loading, setLoading] = useState(true);
   const [isNuking, setIsNuking] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
@@ -265,6 +277,36 @@ export default function App() {
     }
   };
 
+  const handleTransactionUpdated = (txId, newCategory) => {
+    showToast(`Transaction category updated to ${newCategory}`);
+    const isTransfer = newCategory === 'Internal Transfer' || newCategory.toLowerCase() === 'transfer';
+    if (includePersona) {
+      setSelectedPersona((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          transactions: (prev.transactions || []).map((t) =>
+            t.id === txId || t.fingerprint === txId
+              ? { ...t, category: newCategory, is_internal_transfer: isTransfer }
+              : t
+          ),
+        };
+      });
+    } else {
+      setImportedOverview((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          transactions: (prev.transactions || []).map((t) =>
+            t.id === txId || t.fingerprint === txId
+              ? { ...t, category: newCategory, is_internal_transfer: isTransfer }
+              : t
+          ),
+        };
+      });
+    }
+  };
+
   const handleNukeData = async () => {
     setIsNuking(true);
     try {
@@ -287,6 +329,7 @@ export default function App() {
       setSafeToSpend(null);
       setImportedOverview(null);
       setOverviewMode('PERSONA');
+      setActiveTab('OVERVIEW');
       setDataEpoch((prev) => prev + 1);
       showToast(
         `Deleted ${shredded} database record${shredded === 1 ? '' : 's'}. Consent was removed; re-authorize to continue.`,
@@ -353,6 +396,7 @@ export default function App() {
       setSafeToSpend(null);
       setImportedOverview(null);
       setOverviewMode('PERSONA');
+      setActiveTab('OVERVIEW');
       setDataEpoch((prev) => prev + 1);
       showToast(
         res.status === 'CONSENT_WITHDRAWN'
@@ -462,20 +506,20 @@ export default function App() {
       )}
 
       {/* App Foreground Layout with High-Contrast Glass Framing */}
-      <div className="relative z-10 flex min-h-screen bg-black/60 backdrop-blur-[1px]">
+      <div className="relative z-10 flex h-screen overflow-hidden bg-black/60 backdrop-blur-[1px]">
         
         {/* Desktop & Mobile Responsive Sidebar */}
         <Sidebar
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
+          onSelectTab={handleTabSelect}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
           mobileOpen={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
         />
 
-        {/* Main Application Container */}
-        <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* Main Application Container — Independently Scrollable Viewport Column */}
+        <div id="main-scroll-container" className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto overflow-x-hidden relative">
           
           {/* Top App Bar — Boot Sequence Stage 1 */}
           <div className="boot-stage-1">
@@ -520,8 +564,11 @@ export default function App() {
               </div>
             ) : null}
 
-            {/* Header & Persona Card ("Rohit Verma") — Boot Sequence Stage 2 */}
-            {selectedPersona && (
+            {/* Header & Persona Card — only rendered when the persona scenario
+                is the active financial dataset. Imported mode gets its own
+                identity card below so synthetic profile data can never be
+                mistaken for the imported customer's position. */}
+            {includePersona && selectedPersona && (
               <Card
                 corners={12}
                 cornerStroke={2}
@@ -595,6 +642,73 @@ export default function App() {
                   </span>
                   <span className="hidden sm:inline">DATA COVENANT: CLIENT-FIRST DPDP 2026</span>
                   <span>ENCRYPTION: AES-256 / SHA-256 IDENTIFIER</span>
+                </div>
+              </Card>
+            )}
+
+            {/* Imported-statement identity card. Deliberately contains no
+                persona name, balance, account number or scenario leak summary:
+                the only identity shown is the observed statement dataset. */}
+            {!includePersona && currentOverviewMode === 'IMPORTED' && (
+              <Card
+                corners={12}
+                cornerStroke={2}
+                className="boot-stage-2 backdrop-blur-md p-6 mb-8"
+              >
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                      <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white m-0 font-mono">
+                        Imported Statement Profile
+                      </h2>
+                      <span className="border border-white bg-black px-2 py-0.5 text-[9px] font-mono uppercase text-white font-bold tracking-widest shrink-0">
+                        IMPORTED STATEMENT · OBSERVED
+                      </span>
+                      <span className="border border-[#404040] bg-[#111111] px-2 py-0.5 text-[9px] font-mono uppercase text-[#AAAAAA] font-bold tracking-widest shrink-0">
+                        DEMO PERSONA NOT ACTIVE
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#AAAAAA] font-mono mt-1.5 m-0 leading-relaxed max-w-2xl">
+                      No customer identity is inferred or displayed. Every value here is derived only
+                      from the imported statement rows, so synthetic persona names, balances and leak
+                      summaries are not applied to this position.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-6 text-right font-mono border-t md:border-t-0 border-[#202020] pt-4 md:pt-0 w-full md:w-auto justify-between md:justify-end">
+                    <div>
+                      <div className="text-[10px] uppercase text-[#AAAAAA] tracking-wider">
+                        Statement Period
+                      </div>
+                      <div className="text-sm sm:text-base font-bold text-white mt-0.5 tracking-tight">
+                        {importedOverview?.statement_period?.label || activeDatasetPeriod}
+                      </div>
+                    </div>
+                    <div className="border-l border-[#202020] pl-6">
+                      <div className="text-[10px] uppercase text-[#AAAAAA] tracking-wider">
+                        Transactions
+                      </div>
+                      <div className="text-sm sm:text-base font-bold text-white mt-0.5 tracking-tight">
+                        {importedOverview?.transaction_count ?? 0}
+                      </div>
+                    </div>
+                    <div className="border-l border-[#202020] pl-6">
+                      <div className="text-[10px] uppercase text-[#AAAAAA] tracking-wider">
+                        Months Covered
+                      </div>
+                      <div className="text-sm sm:text-base font-bold text-white mt-0.5 tracking-tight">
+                        {importedOverview?.data_coverage?.distinct_months ?? 0}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-[#1a1a1a] flex flex-wrap items-center justify-between text-[9px] font-mono text-[#8A8A8A] uppercase tracking-wider">
+                  <span>
+                    SESSION REF: <CrypticText text={sessionId ? `${sessionId.slice(0, 16)}...` : 'DISCONNECTED'} duration={300} triggerKey={sessionId} />
+                  </span>
+                  <span className="hidden sm:inline">IDENTITY: NOT INFERRED · DATASET: OBSERVED</span>
+                  <span>DATA COVENANT: CLIENT-FIRST DPDP 2026</span>
                 </div>
               </Card>
             )}
@@ -711,14 +825,25 @@ export default function App() {
                         datasetSourceLabel={activeDatasetLabel}
                         reportingPeriod={activeDatasetPeriod}
                         metricBasis={importedOverview.health_metrics?.metric_basis || {}}
+                        coverageLimitations={
+                          importedOverview.health_metrics?.coverage_limitations ||
+                          importedOverview.coverage_limitations ||
+                          []
+                        }
+                        healthStatus={importedOverview.health_metrics?.health_status}
                         leakageStatus="EVIDENCE_REVIEW"
                       />
                       <InsightsBriefing
                         sessionId={sessionId}
                         includePersona={false}
+                        hasConsented={hasConsented}
                         datasetSourceLabel={activeDatasetLabel}
                       />
-                      <TransactionTable transactions={importedOverview.transactions || []} />
+                      <TransactionTable
+                        transactions={importedOverview.transactions || []}
+                        onTransactionUpdated={handleTransactionUpdated}
+                        dataSourceLabel={activeDatasetLabel}
+                      />
                     </>
                   ) : (
                     <>
@@ -730,14 +855,21 @@ export default function App() {
                         datasetSourceLabel={activeDatasetLabel}
                         reportingPeriod={activeDatasetPeriod}
                         metricBasis={{ health_score: 'PERSONA_SCENARIO_ESTIMATE', runway: 'PERSONA_SCENARIO_ESTIMATE' }}
+                        coverageLimitations={['PERSONA_SCENARIO_ESTIMATE']}
+                        healthStatus="ESTIMATED"
                         leakageStatus="SCENARIO_UNVERIFIED"
                       />
                       <InsightsBriefing
                         sessionId={sessionId}
                         includePersona={true}
+                        hasConsented={hasConsented}
                         datasetSourceLabel={activeDatasetLabel}
                       />
-                      <TransactionTable transactions={selectedPersona?.transactions || []} />
+                      <TransactionTable
+                        transactions={selectedPersona?.transactions || []}
+                        onTransactionUpdated={handleTransactionUpdated}
+                        dataSourceLabel={activeDatasetLabel}
+                      />
                     </>
                   )}
                 </div>
@@ -797,14 +929,15 @@ export default function App() {
                 <div className="view-enter">
                   <CommitmentStressTest
                     sessionId={sessionId}
-                    discretionaryBuffer={safeToSpend?.uncommitted_discretionary_buffer || 14000}
+                    discretionaryBuffer={safeToSpend?.uncommitted_discretionary_buffer ?? null}
                     currentBalance={
                       includePersona && selectedPersona
                         ? selectedPersona?.account_summary?.current_balance
                         : null
                     }
                     includePersona={includePersona}
-                    onNavigateToLedger={() => setActiveTab('AUDIT_LEDGER')}
+                    hasConsented={hasConsented}
+                    onNavigateToLedger={() => handleTabSelect('AUDIT_LEDGER')}
                   />
                 </div>
               )}
@@ -813,7 +946,7 @@ export default function App() {
                 <div className="view-enter">
                   <EmiSimulator 
                     discretionaryBuffer={
-                      safeToSpend?.uncommitted_discretionary_buffer || 14000
+                      safeToSpend?.uncommitted_discretionary_buffer ?? null
                     } 
                   />
                 </div>
@@ -821,32 +954,76 @@ export default function App() {
 
               {activeTab === 'AUDIT_LEDGER' && (
                 <div className="view-enter space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border border-[#202020] bg-black/90 p-3 font-mono text-[9px] uppercase tracking-widest text-[#AAAAAA]">
+                  {/* Ledger Sub-View Switcher: Transaction Journal vs DPDP Privacy Audit Trail */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 border border-[#202020] bg-black/90 p-3">
                     <div className="flex items-center gap-2">
                       <Layers className="w-3.5 h-3.5 text-white" />
-                      <span className="text-white font-bold">LEDGER DATA SOURCE</span>
+                      <span className="text-white font-mono font-bold text-xs uppercase tracking-widest">
+                        Ledger View
+                      </span>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="border border-white bg-black px-2 py-0.5 text-white font-bold">
-                        {activeDatasetLabel}
-                      </span>
-                      <span>{activeDatasetPeriod}</span>
-                      <span>
-                        {includePersona ? 'Scenario rows' : 'Imported statement rows'}:{' '}
-                        {(includePersona
-                          ? selectedPersona?.transactions
-                          : importedOverview?.transactions
-                        )?.length || 0}
-                      </span>
+                    <div className="flex items-center gap-2 font-mono text-[10px] uppercase">
+                      <button
+                        onClick={() => setLedgerSubTab('TRANSACTIONS')}
+                        className={`px-3 py-1 border transition-colors ${
+                          ledgerSubTab === 'TRANSACTIONS'
+                            ? 'border-white bg-white text-black font-bold'
+                            : 'border-[#333333] bg-black text-[#AAAAAA] hover:text-white hover:border-[#666666]'
+                        }`}
+                      >
+                        Transaction Journal ({
+                          (includePersona
+                            ? selectedPersona?.transactions
+                            : importedOverview?.transactions
+                          )?.length || 0
+                        })
+                      </button>
+                      <button
+                        onClick={() => setLedgerSubTab('PRIVACY_TRAIL')}
+                        className={`px-3 py-1 border transition-colors ${
+                          ledgerSubTab === 'PRIVACY_TRAIL'
+                            ? 'border-white bg-white text-black font-bold'
+                            : 'border-[#333333] bg-black text-[#AAAAAA] hover:text-white hover:border-[#666666]'
+                        }`}
+                      >
+                        DPDP Privacy Audit Trail
+                      </button>
                     </div>
                   </div>
-                  <TransactionTable
-                    transactions={
-                      includePersona
-                        ? selectedPersona?.transactions || []
-                        : importedOverview?.transactions || []
-                    }
-                  />
+
+                  {ledgerSubTab === 'TRANSACTIONS' ? (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-3 border border-[#202020] bg-black/90 p-3 font-mono text-[9px] uppercase tracking-widest text-[#AAAAAA]">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-bold">TRANSACTION DATASET</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="border border-white bg-black px-2 py-0.5 text-white font-bold">
+                            {activeDatasetLabel}
+                          </span>
+                          <span>{activeDatasetPeriod}</span>
+                          <span>
+                            {includePersona ? 'Scenario rows' : 'Imported statement rows'}:{' '}
+                            {(includePersona
+                              ? selectedPersona?.transactions
+                              : importedOverview?.transactions
+                            )?.length || 0}
+                          </span>
+                        </div>
+                      </div>
+                      <TransactionTable
+                        transactions={
+                          includePersona
+                            ? selectedPersona?.transactions || []
+                            : importedOverview?.transactions || []
+                        }
+                        onTransactionUpdated={handleTransactionUpdated}
+                        dataSourceLabel={activeDatasetLabel}
+                      />
+                    </>
+                  ) : (
+                    <PrivacyAuditTrail sessionId={sessionId} />
+                  )}
                 </div>
               )}
             </div>
@@ -869,6 +1046,9 @@ export default function App() {
               </div>
             </div>
           </footer>
+
+          {/* Accessible Floating Back-to-Top Control */}
+          <BackToTop threshold={350} scrollContainerId="main-scroll-container" />
 
         </div>
 

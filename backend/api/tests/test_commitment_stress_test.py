@@ -83,6 +83,7 @@ class CommitmentStressTestUnitTests(TestCase):
             price=12000.0,
             commitment_type="large_purchase",
             down_payment=0.0,
+            custom_liquid_balance=120000.0,
             include_persona=False,
             as_of_date=date(2026, 10, 15),
         )
@@ -99,6 +100,7 @@ class CommitmentStressTestUnitTests(TestCase):
             price=135000.0,
             commitment_type="large_purchase",
             down_payment=0.0,
+            custom_liquid_balance=120000.0,
             include_persona=False,
             as_of_date=date(2026, 10, 15),
         )
@@ -118,6 +120,7 @@ class CommitmentStressTestUnitTests(TestCase):
             down_payment=15000.0,
             tenure_months=6,
             delay_days=0,
+            custom_liquid_balance=120000.0,
             include_persona=False,
             as_of_date=date(2026, 10, 15),
         )
@@ -130,6 +133,7 @@ class CommitmentStressTestUnitTests(TestCase):
             down_payment=15000.0,
             tenure_months=6,
             delay_days=45,
+            custom_liquid_balance=120000.0,
             include_persona=False,
             as_of_date=date(2026, 10, 15),
         )
@@ -151,6 +155,7 @@ class CommitmentStressTestUnitTests(TestCase):
             tenure_months=6,
             monthly_processing_fee=199.0,
             upfront_processing_fee=500.0,
+            custom_liquid_balance=120000.0,
             include_persona=False,
         )
         emi_scenario = res["scenario_b_emi"]
@@ -214,7 +219,12 @@ class CommitmentStressTestUnitTests(TestCase):
             source_type="import",
             is_recurring=False,
         )
-        res = run_commitment_stress_test(session_id=self.session_id, price=10000.0, include_persona=False)
+        res = run_commitment_stress_test(
+            session_id=self.session_id,
+            price=10000.0,
+            custom_liquid_balance=120000.0,
+            include_persona=False,
+        )
         self.assertEqual(res["baseline"]["existing_fixed_obligations"], 25000.0)
 
     # 9. Refunds and own-account transfers do not inflate income
@@ -238,7 +248,12 @@ class CommitmentStressTestUnitTests(TestCase):
             category="refund",
             source_type="import",
         )
-        res = run_commitment_stress_test(session_id=self.session_id, price=10000.0, include_persona=False)
+        res = run_commitment_stress_test(
+            session_id=self.session_id,
+            price=10000.0,
+            custom_liquid_balance=120000.0,
+            include_persona=False,
+        )
         # Operating income should remain exactly 80000.0, not 115000.0
         self.assertEqual(res["baseline"]["predictable_monthly_income"], 80000.0)
 
@@ -322,6 +337,7 @@ class CommitmentStressTestIntegrationAndSecurityTests(TestCase):
             session_id=session_b.session_id,
             consent_version="v1.0",
             anonymized_processing_accepted=True,
+            no_credential_disclosure_acknowledged=True,
             is_active=True,
         )
 
@@ -458,11 +474,33 @@ class CommitmentStressTestIntegrationAndSecurityTests(TestCase):
         self.assertEqual(nuke_resp.status_code, status.HTTP_200_OK)
         self.assertEqual(nuke_resp.data["status"], "HARD_PURGE_SUCCESSFUL")
 
-        # Confirm transactions and snapshots were completely shredded
+        # Confirm transactions and snapshots were completely shredded, and the
+        # previous consent record was invalidated with the data.
         self.assertEqual(Transaction.objects.filter(session_id=self.session_id).count(), 0)
         self.assertEqual(FinancialSnapshot.objects.filter(session_id=self.session_id).count(), 0)
+        self.assertFalse(
+            ConsentAuditLog.objects.filter(session_id=self.session_id).exists()
+        )
 
-        # Subsequent stress test on purged session returns INSUFFICIENT DATA
+        # Access without re-consent must be refused, not silently analysed.
+        blocked_resp = self.client.post(
+            "/api/v1/analytics/commitment-stress-test/",
+            {"price": 25000, "tenure_months": 6},
+            HTTP_X_SESSION_TOKEN=self.token,
+            format="json",
+        )
+        self.assertEqual(blocked_resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(blocked_resp.data["code"], "CONSENT_REQUIRED")
+
+        # With fresh consent and no surviving rows, the engine must report
+        # INSUFFICIENT DATA rather than resurrect purged figures.
+        ConsentAuditLog.objects.create(
+            session_id=self.session_id,
+            consent_version="v1.0-post-purge",
+            anonymized_processing_accepted=True,
+            no_credential_disclosure_acknowledged=True,
+            is_active=True,
+        )
         stress_resp = self.client.post(
             "/api/v1/analytics/commitment-stress-test/",
             {"price": 25000, "tenure_months": 6},
@@ -530,6 +568,7 @@ class CommitmentStressTestIntegrationAndSecurityTests(TestCase):
             price=40000.0,
             commitment_type="large_purchase",
             delay_days=30,
+            custom_liquid_balance=100000.0,
             as_of_date=date(2026, 10, 15),
         )
 
@@ -562,6 +601,28 @@ class CommitmentStressTestIntegrationAndSecurityTests(TestCase):
             category="Salary",
             source_type="import",
         )
+        # Fixed obligation and living expenses must be observed in the imported
+        # dataset itself. The persona-shaped snapshot above is intentionally
+        # ignored in imported mode, so relying on it would be a dataset leak.
+        Transaction.objects.create(
+            session_id=tight_session,
+            transaction_date=date(2026, 10, 3),
+            amount=Decimal("30000.00"),
+            transaction_type="DEBIT",
+            normalized_merchant="HOME LOAN EMI HDFC",
+            category="EMI",
+            source_type="import",
+            is_recurring=True,
+        )
+        Transaction.objects.create(
+            session_id=tight_session,
+            transaction_date=date(2026, 10, 5),
+            amount=Decimal("8000.00"),
+            transaction_type="DEBIT",
+            normalized_merchant="BIGBASKET GROCERIES",
+            category="Food",
+            source_type="import",
+        )
 
         res = run_commitment_stress_test(
             session_id=tight_session,
@@ -569,6 +630,7 @@ class CommitmentStressTestIntegrationAndSecurityTests(TestCase):
             price=60000.0,
             commitment_type="no_cost_emi",
             tenure_months=6,
+            custom_liquid_balance=50000.0,
             as_of_date=date(2026, 10, 15),
         )
         # EMI is ~10,000/mo while discretionary buffer is only 2,000/mo (> 45% limit)

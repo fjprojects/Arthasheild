@@ -55,7 +55,12 @@ const SEVERITY_CONFIG = {
   },
 };
 
-export default function InsightsBriefing({ sessionId, includePersona = false, datasetSourceLabel }) {
+export default function InsightsBriefing({
+  sessionId,
+  includePersona = false,
+  hasConsented = true,
+  datasetSourceLabel,
+}) {
   const [briefing, setBriefing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -87,14 +92,21 @@ export default function InsightsBriefing({ sessionId, includePersona = false, da
       }
     };
 
-    if (sessionId) {
+    // Never call the consent-gated briefing endpoint before consent is
+    // verified active. Rendering nothing is safer than surfacing a 403.
+    if (sessionId && hasConsented) {
       fetchBriefing();
+    } else {
+      setBriefing(null);
+      setLoading(false);
     }
 
     return () => {
       isMounted = false;
     };
-  }, [sessionId, includePersona]);
+  }, [sessionId, includePersona, hasConsented]);
+
+  if (!hasConsented) return null;
 
   if (loading) {
     return (
@@ -130,9 +142,9 @@ export default function InsightsBriefing({ sessionId, includePersona = false, da
     <div className="space-y-4 font-mono">
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#202020] pb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <h3 className="text-xs font-bold uppercase tracking-widest text-white m-0">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <h3 className="text-xs font-bold uppercase tracking-widest text-white m-0 break-words">
             <CrypticText text="EVIDENCE-BASED FINANCIAL BRIEFING" />
           </h3>
           <span className="border border-[#404040] bg-[#111111] text-[9px] uppercase tracking-widest px-2 py-0.5 text-[#AAAAAA]">
@@ -142,7 +154,7 @@ export default function InsightsBriefing({ sessionId, includePersona = false, da
             {datasetSourceLabel || (includePersona ? 'DEMO PERSONA · SCENARIO' : 'IMPORTED STATEMENT · OBSERVED')}
           </span>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-[#888888]">
+        <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#888888]">
           <span className="border border-emerald-500/40 bg-emerald-950/20 text-emerald-400 px-1.5 py-0.5 text-[8px] uppercase font-bold tracking-wider">
             Deterministic Math
           </span>

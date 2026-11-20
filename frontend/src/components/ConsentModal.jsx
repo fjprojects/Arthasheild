@@ -88,47 +88,52 @@ export default function ConsentModal({ onConsentGiven }) {
           </div>
 
           <div className="space-y-3">
-            <h2
+            <h1
               id="consent-title"
-              className="m-0 text-base font-bold uppercase leading-snug tracking-[0.14em] text-white sm:text-lg"
+              className="m-0 font-mono text-base font-bold uppercase leading-snug tracking-wider text-white sm:text-lg"
             >
-              Privacy & Consent Gateway
-            </h2>
-            <p className="m-0 text-[12px] leading-relaxed text-[#C8C8C8] sm:text-[13px]">
-              ArthaShield includes synthetic demo personas and an optional statement-upload
-              workflow. No bank login, password, OTP, UPI PIN or card CVV is requested.
+              Privacy-First Financial Intelligence &amp; Decision Shield
+            </h1>
+            <p className="m-0 font-sans text-xs leading-relaxed text-[#D0D0D0] sm:text-sm">
+              ArthaShield analyzes recurring commitments, detects stealth subscription traps, and
+              stress-tests major financial decisions—without requesting your bank passwords, OTPs,
+              or storing unredacted bank statements.
             </p>
-            <p className="m-0 text-[11px] leading-relaxed text-[#A8A8A8]">
-              Uploaded statement content is sent to the ArthaShield server for parsing and
-              redaction. Raw statements are not saved by the demo database; only sanitized
-              transactions are stored when you choose <span className="text-white">Import &amp; Save</span>.
-              Sanitized text may be sent to the configured AI provider when you run analysis.
+            <p className="m-0 font-sans text-[11px] leading-relaxed text-[#A0A0A0]">
+              Explore using built-in synthetic personas or upload a statement export. Uploaded statements
+              undergo client-side &amp; server-side identifier redaction before any optional AI advisory.
             </p>
           </div>
 
-          <div className="divide-y divide-[#1A1A1A] border border-[#202020] bg-[#070707]">
-            {PRINCIPLES.map((principle) => (
-              <div
-                key={principle.number}
-                className="grid grid-cols-[2.15rem_1fr] gap-3 p-3.5 sm:p-4"
-              >
-                <span
-                  aria-hidden="true"
-                  className="flex h-7 w-7 items-center justify-center border border-[#404040] bg-black text-[10px] font-bold text-white"
+          <details className="group border border-[#202020] bg-[#070707] p-3 text-xs">
+            <summary className="flex cursor-pointer items-center justify-between font-mono text-[11px] font-bold uppercase tracking-wider text-white select-none">
+              <span>View Privacy Architecture &amp; Guarantees (3 Principles)</span>
+              <span className="text-[#888888] transition-transform duration-200 group-open:rotate-180">▼</span>
+            </summary>
+            <div className="mt-3 divide-y divide-[#1A1A1A] border-t border-[#1A1A1A] pt-1">
+              {PRINCIPLES.map((principle) => (
+                <div
+                  key={principle.number}
+                  className="grid grid-cols-[2.15rem_1fr] gap-3 py-3"
                 >
-                  {principle.number}
-                </span>
-                <div className="min-w-0 space-y-1">
-                  <h3 className="m-0 text-[11px] font-bold uppercase tracking-[0.08em] text-white sm:text-[12px]">
-                    {principle.title}
-                  </h3>
-                  <p className="m-0 text-[11px] leading-relaxed text-[#BDBDBD] sm:text-[12px]">
-                    {principle.body}
-                  </p>
+                  <span
+                    aria-hidden="true"
+                    className="flex h-7 w-7 items-center justify-center border border-[#404040] bg-black font-mono text-[10px] font-bold text-white"
+                  >
+                    {principle.number}
+                  </span>
+                  <div className="min-w-0 space-y-1">
+                    <h3 className="m-0 font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-white sm:text-[12px]">
+                      {principle.title}
+                    </h3>
+                    <p className="m-0 font-sans text-[11px] leading-relaxed text-[#BDBDBD] sm:text-[12px]">
+                      {principle.body}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </details>
 
           <div className="space-y-2">
             <label
@@ -158,13 +163,13 @@ export default function ConsentModal({ onConsentGiven }) {
                   strokeWidth={3}
                 />
               </span>
-              <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-[#C8C8C8] break-words sm:text-[12px]">
+              <span className="min-w-0 flex-1 font-sans text-xs leading-relaxed text-[#D0D0D0] break-words">
                 I consent to ArthaShield processing statement content I submit for parsing and
                 redaction, and to sending sanitized text to the configured AI provider when I run
                 analysis. I will not submit bank passwords, OTPs, PINs or card CVVs.
               </span>
             </label>
-            <p id="consent-detail" className="m-0 pl-[3.25rem] text-[10px] leading-relaxed text-[#8F8F8F] break-words">
+            <p id="consent-detail" className="m-0 pl-[3.25rem] font-sans text-[11px] leading-relaxed text-[#8F8F8F] break-words">
               You can withdraw consent from the dashboard header at any time. Withdrawal blocks
               persistent writes and AI analysis for this session.
             </p>

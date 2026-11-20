@@ -40,7 +40,7 @@ import { Tooltip } from './ui/Tooltip';
  *     not jump.
  */
 
-const EXPANDED_WIDTH = 288;
+const EXPANDED_WIDTH = 300;
 const COLLAPSED_WIDTH = 76;
 
 /**
@@ -91,7 +91,7 @@ const NAV_ITEMS = [
   },
   {
     id: 'AUDIT_LEDGER',
-    label: 'Audit Ledger',
+    label: 'Audit & Transaction Ledger',
     icon: ReceiptText,
     code: 'SYS_07',
   },
@@ -135,7 +135,7 @@ function SidebarPanel({
     const buttonRect = button.getBoundingClientRect();
     if (!navRect.height || !buttonRect.height) return;
     setIndicator({
-      top: buttonRect.top - navRect.top,
+      top: buttonRect.top - navRect.top + (nav.scrollTop || 0),
       height: buttonRect.height,
       ready: true,
     });
@@ -165,12 +165,13 @@ function SidebarPanel({
       style={{ width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
       aria-label="Primary navigation"
     >
-      {/* Brand Header */}
-      <div>
+      {/* Top Section: Brand Header & Independently Scrollable Navigation */}
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* Brand Header */}
         <div
-          className={`h-16 flex items-center border-b border-[#202020] ${RAIL_TRANSITION}`}
+          className={`h-16 flex items-center border-b border-[#202020] shrink-0 ${RAIL_TRANSITION}`}
           style={{
-            paddingLeft: collapsed ? 8 : 24,
+            paddingLeft: collapsed ? 8 : 20,
             paddingRight: collapsed ? 8 : 16,
             gap: collapsed ? 0 : 12,
           }}
@@ -182,7 +183,7 @@ function SidebarPanel({
           {/* Brand text - fades and slides out, never unmounted */}
           <div
             className={`min-w-0 overflow-hidden ${TEXT_TRANSITION} ${textHidden}`}
-            style={{ maxWidth: collapsed ? 0 : 150 }}
+            style={{ maxWidth: collapsed ? 0 : 160 }}
             aria-hidden={collapsed}
           >
             <div className="flex items-center space-x-2 whitespace-nowrap">
@@ -228,8 +229,8 @@ function SidebarPanel({
 
         {/* Section Header */}
         <div
-          className={`pt-6 pb-2 flex items-center justify-between overflow-hidden ${TEXT_TRANSITION} ${textHidden}`}
-          style={{ paddingLeft: collapsed ? 0 : 24, paddingRight: collapsed ? 0 : 24, maxWidth: collapsed ? 0 : EXPANDED_WIDTH }}
+          className={`pt-5 pb-2 flex items-center justify-between overflow-hidden shrink-0 ${TEXT_TRANSITION} ${textHidden}`}
+          style={{ paddingLeft: collapsed ? 0 : 20, paddingRight: collapsed ? 0 : 20, maxWidth: collapsed ? 0 : EXPANDED_WIDTH }}
           aria-hidden={collapsed}
         >
           <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-[#8A8A8A] whitespace-nowrap">
@@ -240,11 +241,13 @@ function SidebarPanel({
           </span>
         </div>
 
-        {/* Navigation Items - Strict Inverted Active State */}
-        <nav ref={navRef} className="relative py-2 flex flex-col space-y-1">
-          {/* Sliding active indicator - moves between the six items. It sits in
-              the left padding of the active item, so it never covers a label,
-              an icon or a system identifier. */}
+        {/* Navigation Items - Independently Scrollable Container */}
+        <nav
+          ref={navRef}
+          onScroll={measureIndicator}
+          className="relative py-2 flex flex-col space-y-1 flex-1 overflow-y-auto overflow-x-hidden min-h-0"
+        >
+          {/* Sliding active indicator */}
           <span
             aria-hidden="true"
             className="nav-indicator pointer-events-none absolute left-0 z-20 w-1 bg-black"
@@ -265,37 +268,38 @@ function SidebarPanel({
                 }}
                 type="button"
                 onClick={() => handleNavClick(item.id)}
+                title={item.label}
                 aria-label={collapsed ? `${item.label} (${item.code})` : undefined}
                 aria-current={isActive ? 'page' : undefined}
                 className={`relative w-full cursor-pointer select-none text-left transition-all group flex items-center py-3 ${RAIL_TRANSITION} ${
                   isActive
-                    ? 'bg-white text-black font-bold uppercase tracking-[0.18em] text-[10px] shadow-[0_0_15px_rgba(255,255,255,0.15)]'
-                    : 'text-[#AAAAAA] hover:text-white hover:bg-[rgba(17,17,17,0.85)] uppercase tracking-[0.18em] text-[10px]'
+                    ? 'bg-white text-black font-bold uppercase tracking-wider text-[10px] shadow-[0_0_15px_rgba(255,255,255,0.15)]'
+                    : 'text-[#AAAAAA] hover:text-white hover:bg-[rgba(17,17,17,0.85)] uppercase tracking-wider text-[10px]'
                 }`}
                 style={{
-                  paddingLeft: collapsed ? 0 : 24,
-                  paddingRight: collapsed ? 0 : 24,
+                  paddingLeft: collapsed ? 0 : 20,
+                  paddingRight: collapsed ? 0 : 16,
                   gap: collapsed ? 0 : 12,
                   justifyContent: collapsed ? 'center' : 'flex-start',
                 }}
               >
-                {/* The active notch is the sliding indicator above; it is not
-                    repeated here so the two can never overlap. */}
                 <Icon
                   className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-110 ${
                     isActive ? 'text-black' : 'text-[#AAAAAA]'
                   }`}
                 />
 
-                {/* Label + system code - collapses to zero width */}
+                {/* Label + system code - full readable labels */}
                 <span
-                  className={`flex items-center justify-between min-w-0 overflow-hidden ${TEXT_TRANSITION} ${textHidden}`}
-                  style={{ maxWidth: collapsed ? 0 : 224 }}
+                  className={`flex items-center justify-between min-w-0 overflow-hidden flex-1 ${TEXT_TRANSITION} ${textHidden}`}
+                  style={{ maxWidth: collapsed ? 0 : 240 }}
                   aria-hidden={collapsed}
                 >
-                  <span className="truncate whitespace-nowrap">{item.label}</span>
+                  <span className="truncate whitespace-nowrap font-mono text-[10.5px] leading-tight" title={item.label}>
+                    {item.label}
+                  </span>
                   <span
-                    className={`text-[8px] font-mono font-normal opacity-60 ml-3 whitespace-nowrap ${
+                    className={`text-[8px] font-mono font-normal opacity-60 ml-2 whitespace-nowrap shrink-0 ${
                       isActive ? 'text-black' : 'text-[#8A8A8A]'
                     }`}
                   >
@@ -314,8 +318,8 @@ function SidebarPanel({
         </nav>
       </div>
 
-      {/* Security Gateway Footer Card */}
-      <div className="border-t border-[#202020] relative overflow-hidden">
+      {/* Security Gateway Footer Card — Permanently Anchored at Bottom */}
+      <div className="border-t border-[#202020] relative overflow-hidden shrink-0">
         {/* Full card - collapses away */}
         <div
           className={`p-4 overflow-hidden ${RAIL_TRANSITION} ${textHidden}`}
@@ -407,8 +411,8 @@ export default function Sidebar({
 
   return (
     <>
-      {/* Desktop Sidebar */}
-      <div className="hidden md:block shrink-0 h-screen sticky top-0">
+      {/* Desktop Persistent Sidebar */}
+      <div className="hidden lg:block shrink-0 h-full">
         <SidebarPanel
           activeTab={activeTab}
           onSelectTab={onSelectTab}
@@ -419,16 +423,16 @@ export default function Sidebar({
         />
       </div>
 
-      {/* Mobile Slide-Out Drawer & Backdrop */}
+      {/* Tablet & Mobile Slide-Out Drawer & Backdrop */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={onCloseMobile}
             aria-hidden="true"
           />
           <div
-            className="absolute inset-y-0 left-0 w-[270px] max-w-[85vw] z-10 animate-sidebar-drawer-in shadow-[0_0_60px_rgba(0,0,0,0.9)]"
+            className="absolute inset-y-0 left-0 w-[300px] sm:w-[320px] max-w-[85vw] h-full z-10 animate-sidebar-drawer-in shadow-[0_0_60px_rgba(0,0,0,0.9)]"
             role="dialog"
             aria-modal="true"
             aria-label="Navigation menu"

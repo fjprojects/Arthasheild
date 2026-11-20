@@ -320,6 +320,14 @@ Respond in strict JSON with the following keys:
         # with tokens before the text leaves the host.
         outbound_text = SanitizerService.sanitize(sanitized_text or "")["sanitized_text"]
 
+        # Strict privacy gate: verify that outbound text contains no residual raw phone/PAN/account numbers
+        # or unscrubbed PII indicators before transmitting to an external AI provider.
+        has_raw_phone = bool(re.search(r'(?:\+?91[\s.-]?|0)?[6-9]\d{9}\b', outbound_text))
+        has_raw_pan = bool(re.search(r'\b[A-Z]{5}[0-9]{4}[A-Z]\b', outbound_text))
+        if has_raw_phone or has_raw_pan:
+            logger.warning("Outbound text contained residual unmasked personal identifiers; safely falling back to local heuristics.")
+            return cls._generate_heuristic_response(sanitized_text, computed_metrics)
+
         prompt = f"""
 Analyze the following SANITIZED financial transaction stream and pre-computed health metrics:
 

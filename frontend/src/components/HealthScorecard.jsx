@@ -8,12 +8,32 @@ import {
   Terminal,
   Activity,
   Layers,
-  ArrowUpRight
+  ArrowUpRight,
+  AlertTriangle
 } from 'lucide-react';
 import CrypticText from './effects/CrypticText';
 import OdometerNumber from './effects/OdometerNumber';
 import { Card } from './ui/Card';
 import ProgressBar from './ui/ProgressBar';
+
+const LIMITATION_LABELS = {
+  LIQUID_BALANCE_UNAVAILABLE:
+    'No verified liquid balance is available for this dataset.',
+  EMERGENCY_RUNWAY_WITHHELD:
+    'Emergency runway is withheld because the liquid balance is unverified.',
+  SAFE_TO_SPEND_UNAVAILABLE:
+    'Safe-to-Spend is unavailable because the current balance or in-period coverage is missing.',
+  STATEMENT_PERIOD_ENDED:
+    'The statement period has ended, so a forward-looking daily allowance is unavailable.',
+  INSUFFICIENT_TRANSACTION_DATA:
+    'The statement does not contain enough income or expense rows for a complete assessment.',
+  HEALTH_SCORE_ESTIMATED:
+    'The Health Index is an estimate and is not presented as a verified grade.',
+  PERSONA_SCENARIO_ESTIMATE:
+    'These values are a synthetic persona scenario, not observed customer data.',
+  BALANCE_UNAVAILABLE_FOR_SELECTED_DATASET:
+    'The selected dataset has no verified balance available.',
+};
 
 export default function HealthScorecard({
   healthMetrics,
@@ -23,6 +43,8 @@ export default function HealthScorecard({
   datasetSourceLabel = 'UNSPECIFIED',
   reportingPeriod = 'PERIOD NOT AVAILABLE',
   metricBasis = {},
+  coverageLimitations = [],
+  healthStatus = null,
   leakageStatus = 'REVIEW',
 }) {
   if (!healthMetrics) return null;
@@ -53,6 +75,62 @@ export default function HealthScorecard({
     safeToSpend.safe_to_spend_daily === null ||
     safeToSpend.safe_to_spend_daily === undefined;
 
+  // A score derived without a verified liquid balance is an estimate, not an
+  // observed grade. Persona scenario scores are also explicitly estimates.
+  const healthBasis = metricBasis?.health_score || healthMetrics.health_status || null;
+  const healthEstimated =
+    !scoreUnavailable &&
+    (healthBasis === 'ESTIMATED_BALANCE_UNAVAILABLE' ||
+      healthBasis === 'PERSONA_SCENARIO_ESTIMATE' ||
+      healthStatus === 'ESTIMATED');
+  const healthInsufficient = healthStatus === 'INSUFFICIENT_DATA' || scoreUnavailable;
+  const gradeIsProvisional = healthBasis === 'ESTIMATED_BALANCE_UNAVAILABLE';
+  const displayGrade = healthInsufficient
+    ? 'STATUS UNAVAILABLE'
+    : gradeIsProvisional
+      ? (String(grade).toUpperCase().startsWith('ESTIMATED')
+          ? grade
+          : `PROVISIONAL · ${grade}`)
+      : healthEstimated
+        ? `ESTIMATED · ${grade}`
+        : grade;
+
+  const derivedLimitations = [];
+  if (runwayUnavailable) {
+    derivedLimitations.push(
+      'Emergency runway withheld: no verified liquid balance for this dataset.',
+    );
+  }
+  if (safeToSpendUnavailable) {
+    derivedLimitations.push(
+      safeToSpend?.insufficient_reason
+        ? `Safe-to-Spend unavailable: ${safeToSpend.insufficient_reason.replace(/_/g, ' ').toLowerCase()}.`
+        : 'Safe-to-Spend unavailable: current balance or in-period coverage is missing.',
+    );
+  }
+  if (healthBasis === 'ESTIMATED_BALANCE_UNAVAILABLE') {
+    derivedLimitations.push(
+      'Health Index is estimated from observed income and expenses without a verified liquid balance; it is not a verified grade.',
+    );
+  } else if (healthBasis === 'PERSONA_SCENARIO_ESTIMATE') {
+    derivedLimitations.push(
+      'Health Index is a synthetic persona scenario estimate, not observed customer data.',
+    );
+  }
+  if (healthInsufficient) {
+    derivedLimitations.push(
+      'Essential income or balance data is missing, so no health grade is asserted.',
+    );
+  }
+  const limitations = Array.from(
+    new Set([
+      ...(coverageLimitations || []).map(
+        (item) => LIMITATION_LABELS[item] || item,
+      ),
+      ...derivedLimitations,
+    ]),
+  );
+
   return (
     <div className="space-y-6">
       
@@ -67,7 +145,13 @@ export default function HealthScorecard({
         <div className="space-y-2">
           <div className="flex items-center space-x-2 text-[9px] font-mono uppercase text-[#AAAAAA] tracking-widest">
             <Clock className="w-3.5 h-3.5 text-white" />
-            <span>Cycle Reset in {safeToSpend?.days_remaining_in_cycle ?? 18} Days</span>
+            <span>
+              Cycle Reset in{' '}
+              {safeToSpend?.days_remaining_in_cycle !== null &&
+              safeToSpend?.days_remaining_in_cycle !== undefined
+                ? `${safeToSpend.days_remaining_in_cycle} Days`
+                : '— (period unavailable)'}
+            </span>
             <span className="text-[#767676]">◈</span>
             <span className="text-white font-bold">DETERMINISTIC LIQUIDITY</span>
           </div>
@@ -154,15 +238,27 @@ export default function HealthScorecard({
               )}
             </div>
 
-            <div className="inline-flex border border-white bg-black text-white text-[9px] font-mono uppercase px-2 py-0.5 mb-3 w-fit font-bold tracking-widest">
-              {grade}
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              <div className="inline-flex border border-white bg-black text-white text-[9px] font-mono uppercase px-2 py-0.5 w-fit font-bold tracking-widest">
+                {displayGrade}
+              </div>
+              {healthEstimated && (
+                <span className="inline-flex border border-amber-500/50 bg-amber-950/30 text-amber-300 text-[8px] font-mono uppercase px-1.5 py-0.5 w-fit font-bold tracking-widest">
+                  ESTIMATED
+                </span>
+              )}
             </div>
           </div>
 
           <div>
             <ProgressBar value={scoreUnavailable ? 0 : Math.min(100, Math.max(5, score))} />
             <p className="text-[9px] font-mono text-[#AAAAAA] mt-2 m-0 uppercase tracking-wider">
-              Financial resilience index · {metricBasis?.health_score === 'PERSONA_SCENARIO_ESTIMATE' ? 'SCENARIO ESTIMATE' : 'DERIVED FROM DATASET'}
+              Financial resilience index ·{' '}
+              {healthInsufficient
+                ? 'INSUFFICIENT DATA'
+                : healthEstimated
+                  ? 'ESTIMATE — NOT A VERIFIED GRADE'
+                  : 'DERIVED FROM OBSERVED DATA'}
             </p>
             <p className="text-[8px] font-mono text-[#777777] mt-1 m-0 uppercase tracking-wider break-words">
               {sourceCaption}
@@ -300,6 +396,29 @@ export default function HealthScorecard({
           </Card>
 
       </div>
+
+      {/* Data-coverage transparency. Missing essential inputs are stated
+          plainly rather than being hidden behind a reassuring grade. */}
+      {limitations.length > 0 && (
+        <div className="border border-amber-500/30 bg-amber-950/10 p-4 flex gap-4 items-start">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="border border-amber-500/50 bg-amber-950/30 text-amber-300 px-1.5 py-0.5 font-bold uppercase tracking-wider text-[9px] font-mono">
+                Data Coverage Limitations
+              </span>
+              <span className="text-[9px] font-mono uppercase text-[#AAAAAA]">
+                Read before treating any metric as complete
+              </span>
+            </div>
+            <ul className="list-disc pl-4 space-y-1 text-[10px] font-mono text-[#BBBBBB] m-0">
+              {limitations.map((limitation) => (
+                <li key={limitation}>{limitation}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Disclaimer Box — Terminal-Style Left Border */}
       <div className="border-l-2 border-white bg-[#0A0A0A] border border-[#202020] p-4 flex gap-4 items-start shadow-sm">

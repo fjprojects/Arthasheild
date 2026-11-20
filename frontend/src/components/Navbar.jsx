@@ -25,7 +25,7 @@ export default function Navbar({
         <button
           onClick={onOpenMobile}
           aria-label="Open navigation menu"
-          className="interactive-control shrink-0 md:hidden p-1.5 text-[#AAAAAA] hover:text-white border border-[#202020] hover:border-white"
+          className="interactive-control shrink-0 lg:hidden p-1.5 text-[#AAAAAA] hover:text-white border border-[#202020] hover:border-white cursor-pointer"
         >
           <Menu className="w-5 h-5" />
         </button>

@@ -13,6 +13,7 @@ from .views import (
     # Consent
     ConsentAuditView,
     ConsentWithdrawView,
+    PrivacyAuditTrailView,
     # Data Parsing
     ParseStatementView,
     ParseSmsView,
@@ -45,6 +46,7 @@ urlpatterns = [
     # Privacy
     path('privacy/consent/', ConsentAuditView.as_view(), name='privacy-consent'),
     path('privacy/consent/withdraw/', ConsentWithdrawView.as_view(), name='consent-withdraw'),
+    path('privacy/audit-trail/', PrivacyAuditTrailView.as_view(), name='privacy-audit-trail'),
     path('privacy/sanitize-preview/', SanitizePreviewView.as_view(), name='sanitize-preview'),
     path('privacy/nuke-data/', NukeDataView.as_view(), name='nuke-data'),
     # Documents / AI Analysis

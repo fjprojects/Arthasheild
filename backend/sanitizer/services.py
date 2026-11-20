@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 
 class SanitizerService:
     """
@@ -9,9 +9,76 @@ class SanitizerService:
     before sending data to external AI models or persistent logs.
 
     Note: This is an automated regex and rule-based redaction engine.
-    It does not claim mathematical zero-knowledge or 100% infallible detection across
-    arbitrary unstructured natural language.
+    It detects personal names via conversational prefixes ('Paid to', 'Sent to', 'Transfer to'),
+    honorifics, UPI recipient patterns, and header structures, balanced against a whitelist
+    of recognized commercial merchants. Note: Natural-language personal name detection in
+    unconstrained text is heuristic; single-word nicknames or ambiguous tokens may not be
+    detected with 100% certainty. High-risk payloads trigger the safe offline heuristic fallback.
     """
+
+    # Commercial, merchant, banking, and category tokens that distinguish genuine
+    # merchants and corporate entities from unlabelled personal names.
+    _BUSINESS_OR_MERCHANT_WORDS = frozenset({
+        'ltd', 'limited', 'pvt', 'private', 'inc', 'corp', 'llp', 'technologies',
+        'technology', 'services', 'solutions', 'enterprises', 'industries', 'consulting',
+        'studio', 'studios', 'design', 'systems', 'labs', 'store', 'stores', 'shop',
+        'retail', 'mart', 'bazaar', 'supermarket', 'hypermarket', 'restaurant', 'cafe',
+        'hotel', 'foods', 'kitchen', 'bakery', 'pharmacy', 'medical', 'hospital', 'clinic',
+        'diagnostics', 'healthcare', 'travel', 'travels', 'tours', 'airlines', 'airways',
+        'motors', 'auto', 'petrol', 'fuel', 'station', 'power', 'energy', 'gas',
+        'electricity', 'water', 'board', 'corporation', 'authority', 'telecom', 'broadband',
+        'infotech', 'software', 'bank', 'finance', 'securities', 'broking', 'capital',
+        'insurance', 'swiggy', 'zomato', 'amazon', 'flipkart', 'netflix', 'spotify',
+        'uber', 'ola', 'bigbasket', 'apollo', 'bescom', 'airtel', 'jio', 'tatasky',
+        'hotstar', 'prime', 'myntra', 'ajio', 'blinkit', 'zepto', 'instamart', 'starbucks',
+        'mcdonalds', 'dominos', 'pizza', 'kfc', 'subway', 'decathlon', 'croma', 'reliance',
+        'tata', 'irctc', 'makemytrip', 'goibibo', 'indigo', 'airindia', 'shopping', 'dining',
+        'grocery', 'utilities', 'bills', 'recharge', 'salary', 'refund', 'reversal', 'cashback',
+        'reimbursement', 'investment', 'interest', 'dividend', 'transfer', 'withdrawal', 'deposit',
+        'charges', 'tax', 'gst', 'fee', 'emi', 'loan', 'rent', 'account', 'self', 'savings',
+        'order', 'bill', 'receipt', 'invoice', 'credit', 'debit', 'purchase', 'card',
+    })
+
+    # Conversational / narration personal-name patterns
+    NARRATION_NAME_PATTERNS = [
+        re.compile(
+            r'\b(?:Paid\s+to|Payment\s+to|Transfer\s+to|Tfr\s+to|Sent\s+to|Received\s+from|From)\s+([A-Za-z]+(?:\s+[A-Za-z]+){1,3})\b',
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r'\b(?:Mr\.?|Mrs\.?|Ms\.?|Dr\.?|Shri|Smt\.?)\s+([A-Za-z]+(?:\s+[A-Za-z]+){1,2})\b',
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r'\bUPI/(?:P2P|CR|DR|PAYTO)?/?([A-Za-z]+(?:\s+[A-Za-z]+){1,3})\b',
+            re.IGNORECASE,
+        ),
+    ]
+
+    @classmethod
+    def clean_and_extract_name(cls, candidate: str) -> Optional[str]:
+        """
+        Extracts a clean personal name candidate by trimming trailing merchant,
+        category, stop-words, or single-character prefixes (e.g. 'A' in 'A/C').
+        Returns the sanitized name string if valid, else None.
+        """
+        if not candidate:
+            return None
+        tokens = candidate.strip().split()
+        while tokens and (len(tokens[-1]) <= 1 or tokens[-1].lower().rstrip('.,') in cls._BUSINESS_OR_MERCHANT_WORDS):
+            tokens.pop()
+        if 2 <= len(tokens) <= 4:
+            if all(t.isalpha() and t.lower() not in cls._BUSINESS_OR_MERCHANT_WORDS for t in tokens):
+                return ' '.join(tokens)
+        return None
+
+    @classmethod
+    def is_probable_personal_name(cls, candidate: str) -> bool:
+        """
+        Determines whether a candidate string is probably an unlabelled personal name.
+        Requires 2 to 4 tokens, rejects recognized merchant, corporate, or financial tokens.
+        """
+        return cls.clean_and_extract_name(candidate) is not None
 
     # High-precision RegEx patterns for financial PII ordered by specificity.
     # More specific and longer token patterns MUST precede general patterns to prevent collisions.
@@ -142,6 +209,23 @@ class SanitizerService:
                     "count": count,
                     "description": "Scrubbed primary identity details / geographic branch address"
                 })
+
+        # 1b. Conversational / Narration Personal Name Redaction
+        personal_name_count = 0
+        for pattern in cls.NARRATION_NAME_PATTERNS:
+            for m in pattern.finditer(sanitized_text):
+                candidate = m.group(1).strip()
+                extracted = cls.clean_and_extract_name(candidate)
+                if extracted and extracted in sanitized_text:
+                    sanitized_text = sanitized_text.replace(extracted, "[REDACTED_BENEFICIARY]")
+                    personal_name_count += 1
+        if personal_name_count > 0:
+            redactions_performed.append({
+                "type": "PERSON_NAME",
+                "placeholder": "[REDACTED_BENEFICIARY]",
+                "count": personal_name_count,
+                "description": f"Detected and masked {personal_name_count} unlabelled personal name(s) in narration"
+            })
 
         # 2. Contextual precedence pass. Only the redaction type, placeholder
         # and count are logged; the matched financial digits are never recorded.

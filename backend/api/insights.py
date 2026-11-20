@@ -21,19 +21,23 @@ _CATEGORY_KEYWORDS = {
         'swiggy', 'zomato', 'restaurant', 'cafe', 'food', 'meal', 'pizza',
         'burger', 'dine', 'biryani', 'tiffin', 'dhaba',
         'zepto', 'blinkit', 'groceries', 'grocery', 'chaipoint', 'chai point',
-        'bigbasket', 'dunzo', 'instamart',
+        'bigbasket', 'dunzo', 'instamart', 'starbucks', 'mcdonalds', 'kfc', 'dominos',
+        'subway', 'bakery', 'canteen', 'dining',
     ],
     'shopping': [
         'flipkart', 'myntra', 'shopping', 'store', 'retail', 'clothing',
-        'apparel', 'meesho', 'ajio', 'nykaa',
+        'apparel', 'meesho', 'ajio', 'nykaa', 'croma', 'reliance digital',
+        'decathlon', 'amazon', 'supermarket', 'mart',
     ],
     'travel': [
         'airline', 'flight', 'uber', 'ola', 'taxi', 'rail', 'train', 'hotel',
-        'booking', 'makemytrip', 'irctc', 'goibibo', 'indigo',
+        'booking', 'makemytrip', 'irctc', 'goibibo', 'indigo', 'petrol',
+        'fuel', 'hpcl', 'bpcl', 'iocl', 'shell', 'fastag', 'toll', 'metro', 'rapido', 'auto',
     ],
     'bills': [
         'electricity', 'water', 'gas', 'utility', 'bill', 'telecom', 'mobile',
-        'internet', 'broadband', 'postpaid', 'maintenance',
+        'internet', 'broadband', 'postpaid', 'maintenance', 'bescom', 'tneb',
+        'msedcl', 'dth', 'tata play', 'dish tv', 'recharge', 'airtel', 'jio', 'vi bill',
     ],
     # Rent is a distinct financial category, not a generic utility bill. It is
     # placed before ``bills`` so keyword fallback keeps the two separate.
@@ -177,6 +181,9 @@ _MEMBERSHIP_EVIDENCE_RE = re.compile(
 # Canonical merchant mapping: ordered longest/most specific pattern first
 _CANONICAL_BRAND_MAP = [
     # Amazon distinct services - specific sub-brands prioritized
+    ('amazon web services', 'aws_cloud'),
+    ('aws cloud', 'aws_cloud'),
+    ('aws', 'aws_cloud'),
     ('amazon pay', 'amazon_pay'),
     ('amazon marketplace', 'amazon_marketplace'),
     ('amazon fresh', 'amazon_fresh'),
@@ -211,6 +218,11 @@ _CANONICAL_BRAND_MAP = [
     ('apple.com/bill', 'apple_bill'),
     ('chatgpt', 'chatgpt'),
     ('openai', 'openai'),
+    ('adobe', 'adobe'),
+    ('figma', 'figma'),
+    ('github copilot', 'github_copilot'),
+    ('github', 'github'),
+    ('canva', 'canva'),
     # Utilities & Telecom
     ('bescom', 'bescom'),
     ('tatapower', 'tata_power'),
@@ -384,6 +396,27 @@ CREDIT_CLASSIFICATION_RULES = {
     ],
 }
 
+# Bank-rail receipt evidence -------------------------------------------------
+# A credit arriving over ACH/NEFT/RTGS/IMPS is a real receipt, but the rail
+# alone does not prove it is income. Pairing the rail with a professional or
+# business counterparty signal supports *probable* business/freelance income;
+# a bare rail or a personal name stays unclassified and requires review.
+_BANK_RAIL_CREDIT_RE = re.compile(
+    r'\b(?:ach|neft|rtgs|imps)\s+(?:credit|credited|cred|cr)\b'
+)
+
+_PROFESSIONAL_COUNTERPARTY_TERMS = (
+    'services', 'design', 'studio', 'studios', 'consulting', 'consultancy',
+    'solutions', 'technologies', 'technology', 'software', 'systems',
+    'digital', 'creative', 'media', 'productions', 'production', 'agency',
+    'labs', 'laboratory', 'engineering', 'analytics', 'marketing',
+    'communications', 'advisors', 'associates', 'ventures', 'enterprises',
+)
+
+_PROFESSIONAL_COUNTERPARTY_RE = re.compile(
+    r'\b(?:' + '|'.join(map(re.escape, _PROFESSIONAL_COUNTERPARTY_TERMS)) + r')\b'
+)
+
 _REFUND_CATEGORY_MAP = {
     'food': ['swiggy', 'zomato', 'restaurant', 'cafe', 'food', 'meal', 'pizza', 'burger', 'dine', 'biryani', 'tiffin', 'dhaba', 'eats'],
     'shopping': ['amazon', 'flipkart', 'myntra', 'shopping', 'store', 'retail', 'clothing', 'apparel', 'meesho', 'ajio', 'nykaa'],
@@ -404,6 +437,8 @@ def classify_credit(merchant: str, description: str = "") -> Dict[str, Any]:
     - capital_liquidation: mutual fund redemptions, stock sale proceeds (not income)
     - investment_transfers: broker cash withdrawals/transfers (not income)
     - earned_income: genuine salary, wages, business receipts, client payouts
+    - business_income: probable client/project receipts from a corporate
+      bank-rail credit (operating income, explicitly marked for review)
     - unclassified: generic peer UPI or unidentified inflows (NOT counted as earned income)
     """
     text = f"{merchant} {description}".lower()
@@ -523,11 +558,31 @@ def classify_credit(merchant: str, description: str = "") -> Dict[str, Any]:
                 "category": "salary",
                 "associated_category": "earned_income",
                 "label": "Earned Income",
+                "classification_status": "CONFIRMED",
+                "requires_review": False,
                 "transfer_confidence": transfer['confidence'],
                 "transfer_evidence": transfer['evidence'],
             }
 
-    # 8. Default: Unclassified Inflow (Generic peer UPI, unidentified credit)
+    # 8. Corporate bank-rail credit with a professional counterparty signal.
+    #    This is stronger than a generic peer inflow but weaker than payroll:
+    #    report it as probable business/freelance income that needs review.
+    if _BANK_RAIL_CREDIT_RE.search(text) and _PROFESSIONAL_COUNTERPARTY_RE.search(text):
+        return {
+            "credit_type": "business_income",
+            "is_earned_income": True,
+            "is_operating_income": True,
+            "category": "business_income",
+            "associated_category": "business_income",
+            "label": "Probable Business / Freelance Income (needs review)",
+            "classification_status": "PROBABLE",
+            "requires_review": True,
+            "classification_evidence": "BANK_RAIL_CORPORATE_COUNTERPARTY",
+            "transfer_confidence": transfer['confidence'],
+            "transfer_evidence": transfer['evidence'],
+        }
+
+    # 9. Default: Unclassified Inflow (Generic peer UPI, unidentified credit)
     return {
         "credit_type": "unclassified",
         "is_earned_income": False,
@@ -535,6 +590,8 @@ def classify_credit(merchant: str, description: str = "") -> Dict[str, Any]:
         "category": "unclassified_credit",
         "associated_category": "unclassified_inflow",
         "label": "Unclassified Inflow",
+        "classification_status": "UNCLASSIFIED",
+        "requires_review": True,
         "transfer_confidence": transfer['confidence'],
         "transfer_evidence": transfer['evidence'],
     }
@@ -595,6 +652,9 @@ def classify_debit(merchant: str, description: str = "") -> Dict[str, Any]:
 _GENERIC_CATEGORY_KEYS = {
     '', 'general', 'uncategorized', 'uncategorised', 'unclassified',
     'other', 'unknown', 'none',
+    # Importer placeholders. These describe the *absence* of a verified label
+    # and must never override a narration-based classification.
+    'unclassified_credit', 'unclassified_inflow', 'unclassified_inflows',
 }
 
 _CATEGORY_ALIASES = {
@@ -616,6 +676,10 @@ _CATEGORY_ALIASES = {
     'salary': 'salary',
     'payroll': 'salary',
     'freelance income': 'freelance_income',
+    'business income': 'business_income',
+    'probable business income': 'business_income',
+    'professional income': 'business_income',
+    'project income': 'business_income',
     'internship stipend': 'internship_stipend',
     'allowance': 'allowance',
     'ai tools': 'subscriptions',
@@ -641,9 +705,21 @@ _CATEGORY_DISPLAY_NAMES = {
     'subscriptions': 'Subscriptions',
     'healthcare': 'Healthcare',
     'freelance_income': 'Freelance Income',
+    'business_income': 'Probable Business Income',
     'internship_stipend': 'Internship Stipend',
     'emi': 'EMI / Loan',
     'unclassified_credit': 'Unclassified Credit',
+    'food': 'Food & Dining',
+    'shopping': 'Shopping',
+    'travel': 'Travel & Commute',
+    'bills': 'Bills & Utilities',
+    'salary': 'Salary',
+    'allowance': 'Allowance',
+    'transfer': 'Internal Transfer',
+    'refund': 'Refund / Reversal',
+    'reimbursement': 'Reimbursement',
+    'other': 'Other Discretionary',
+    'unclassified': 'Unclassified Inflow',
 }
 
 _EARNED_INCOME_CATEGORY_KEYS = {
@@ -676,6 +752,17 @@ def category_display_name(key: str) -> str:
         return 'Rent & Housing'
     if key in set(_CATEGORY_KEYWORDS) | {'refund', 'transfer', 'other'}:
         return key
+    return _CATEGORY_DISPLAY_NAMES.get(key, key.replace('_', ' ').title())
+
+
+def human_category_label(key: str) -> str:
+    """Return a polished human-readable label for presentation in drilldowns."""
+    if not key:
+        return 'Uncategorized'
+    if key == 'rent_housing':
+        return 'Rent & Housing'
+    if key in _CATEGORY_DISPLAY_NAMES:
+        return _CATEGORY_DISPLAY_NAMES[key]
     return _CATEGORY_DISPLAY_NAMES.get(key, key.replace('_', ' ').title())
 
 
@@ -733,7 +820,8 @@ def resolve_credit_classification(tx) -> Dict[str, Any]:
         info['label'] = category_display_name(stored_key)
 
     if stored_key in _EARNED_INCOME_CATEGORY_KEYS and (
-        info['credit_type'] == 'unclassified' or is_user_correction
+        info['credit_type'] in ('unclassified', 'business_income')
+        or is_user_correction
     ):
         info.update({
             'credit_type': 'earned_income',
@@ -742,6 +830,21 @@ def resolve_credit_classification(tx) -> Dict[str, Any]:
             'category': stored_key,
             'associated_category': 'earned_income',
             'label': category_display_name(stored_key),
+            'classification_status': 'CONFIRMED',
+            'requires_review': False,
+        })
+    elif stored_key == 'business_income' and (
+        info['credit_type'] == 'unclassified' or is_user_correction
+    ):
+        info.update({
+            'credit_type': 'business_income',
+            'is_earned_income': True,
+            'is_operating_income': True,
+            'category': 'business_income',
+            'associated_category': 'business_income',
+            'label': category_display_name('business_income'),
+            'classification_status': 'PROBABLE',
+            'requires_review': True,
         })
     elif stored_key == 'transfer' and (
         info['credit_type'] == 'unclassified' or is_user_correction
@@ -850,15 +953,27 @@ def categorize_transactions(session_id: str, include_persona: bool = False) -> L
 # ---------------------------------------------------------------------------
 # 2. Monthly Budget Analyzer
 # ---------------------------------------------------------------------------
-def monthly_budget(session_id: str, year: int, month: int, include_persona: bool = False) -> Dict[str, Any]:
+def monthly_budget(session_id: str, year: Optional[int] = None, month: Optional[int] = None, include_persona: bool = False) -> Dict[str, Any]:
+    source_type = (
+        Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+    )
+    reporting_period_derived = False
+    if year is None or month is None:
+        all_txs = list(Transaction.objects.filter(session_id=session_id, source_type=source_type).order_by('transaction_date'))
+        if all_txs:
+            _start, _end, d_year, d_month = _derive_statement_period(all_txs)
+            year, month = d_year, d_month
+            reporting_period_derived = True
+        else:
+            today = date.today()
+            year, month = today.year, today.month
+            reporting_period_derived = True
+
     start = date(year, month, 1)
     if month == 12:
         end = date(year + 1, 1, 1)
     else:
         end = date(year, month + 1, 1)
-    source_type = (
-        Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
-    )
     qs = Transaction.objects.filter(
         session_id=session_id,
         source_type=source_type,
@@ -866,12 +981,43 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
         transaction_date__lt=end,
     )
 
+    tx_list = list(qs)
+    tx_count = len(tx_list)
+    has_data = tx_count > 0
+
+    if has_data:
+        dates = [t.transaction_date for t in tx_list]
+        min_date = min(dates)
+        max_date = max(dates)
+        days_covered = (max_date - min_date).days + 1
+        unique_days = len(set(dates))
+        is_partial = days_covered < 28
+    else:
+        min_date = None
+        max_date = None
+        days_covered = 0
+        unique_days = 0
+        is_partial = False
+
+    data_coverage = {
+        'start_date': min_date.isoformat() if min_date else None,
+        'end_date': max_date.isoformat() if max_date else None,
+        'days_covered': days_covered,
+        'unique_transaction_days': unique_days,
+        'transaction_count': tx_count,
+        'is_partial_month_likely': is_partial,
+        'extrapolated': False,
+        'note': 'Metrics are calculated from imported transactions in the statement period only. Partial-month statements are not extrapolated to full-month income.',
+    }
+
     credit_qs = qs.filter(transaction_type='CREDIT')
     debit_qs = qs.filter(transaction_type='DEBIT')
 
     total_credits = credit_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
     earned_income = Decimal('0')
+    business_income = Decimal('0')
+    business_income_count = 0
     investment_yield = Decimal('0')
     capital_liquidation = Decimal('0')
     investment_transfers = Decimal('0')
@@ -879,6 +1025,7 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
     transfers_total = Decimal('0')
     reimbursements_total = Decimal('0')
     unclassified_total = Decimal('0')
+    unclassified_count = 0
 
     category_refunds = defaultdict(Decimal)
     refund_tx_list = []
@@ -890,6 +1037,9 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
 
         if ctype == 'earned_income':
             earned_income += amt
+        elif ctype == 'business_income':
+            business_income += amt
+            business_income_count += 1
         elif ctype == 'investment_yield':
             investment_yield += amt
         elif ctype == 'capital_liquidation':
@@ -907,23 +1057,90 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
             reimbursements_total += amt
         else:
             unclassified_total += amt
+            unclassified_count += 1
 
-    operating_income = earned_income + investment_yield
+    # Probable business/freelance receipts are included in operating income so
+    # a real client credit is not silently reported as zero. The amount is
+    # explicitly separated and flagged so the surplus is never presented as
+    # fully observed income.
+    confirmed_operating_income = earned_income + investment_yield
+    operating_income = confirmed_operating_income + business_income
+
+    if total_credits <= 0:
+        operating_income_status = 'NO_CREDITS'
+    elif operating_income <= 0 and unclassified_total > 0:
+        operating_income_status = 'UNCLASSIFIED'
+    elif business_income > 0:
+        operating_income_status = 'PROBABLE'
+    elif operating_income > 0:
+        operating_income_status = 'CONFIRMED'
+    else:
+        operating_income_status = 'NO_OPERATING_INCOME'
+
+    requires_income_review = bool(
+        business_income > 0 or (operating_income <= 0 and unclassified_total > 0)
+    )
+    if business_income > 0:
+        income_note = (
+            f"Operating income includes \u20b9{business_income.quantize(Decimal('0.01'))} "
+            f"of probable business/freelance receipts from {business_income_count} "
+            f"corporate bank-rail credit(s). Confirm the counterparty and contract "
+            f"before relying on the operating surplus."
+        )
+    elif operating_income <= 0 and unclassified_total > 0:
+        income_note = (
+            f"\u20b9{unclassified_total.quantize(Decimal('0.01'))} in credits could not be "
+            f"classified as income. The operating surplus is therefore not an observed result."
+        )
+    elif total_credits <= 0:
+        income_note = "No credits were observed in this statement period."
+    elif operating_income <= 0:
+        income_note = "Credits were observed but none qualified as operating income."
+    else:
+        income_note = "Operating income is supported by salary, client or investment evidence."
 
     gross_debits = debit_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
     debit_transfers = Decimal('0')
     cat_spend = defaultdict(Decimal)
+    cat_transactions = defaultdict(list)
 
     for tx in debit_qs:
         amt = tx.amount
         is_user_transfer = canonical_category_key(tx.category) == 'transfer'
         d_info = classify_debit(tx.normalized_merchant)
         if is_user_transfer or d_info['is_transfer']:
+            cat = 'transfer'
             debit_transfers += amt
             cat_spend['transfer'] += amt
         else:
             cat = resolve_transaction_category(tx)
             cat_spend[cat] += amt
+        tx_item = {
+            'id': str(tx.id),
+            'date': tx.transaction_date.isoformat(),
+            'merchant': _safe_counterparty_label(tx.normalized_merchant),
+            'amount': str(amt.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'type': 'DEBIT',
+            'category': human_category_label(cat),
+        }
+        cat_transactions[cat].append(tx_item)
+        human_name = human_category_label(cat)
+        if human_name != cat:
+            cat_transactions[human_name].append(tx_item)
+
+    for tx in credit_qs:
+        info = resolve_credit_classification(tx)
+        if info['credit_type'] == 'unclassified':
+            credit_item = {
+                'id': str(tx.id),
+                'date': tx.transaction_date.isoformat(),
+                'merchant': _safe_counterparty_label(tx.normalized_merchant),
+                'amount': str(tx.amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'type': 'CREDIT',
+                'category': 'Unclassified Inflow',
+            }
+            cat_transactions['unclassified'].append(credit_item)
+            cat_transactions['Unclassified Inflow'].append(credit_item)
 
     gross_living_expenses = gross_debits - debit_transfers
 
@@ -1053,15 +1270,16 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
         ]
         return [], MATCH_WEAK, evidence
 
-    # Replay prior refunds in [lookback_start, start) so prior debits reflect correct remaining balance
+    # Replay prior refunds in [lookback_start, start) so prior debits reflect
+    # correct remaining balance. The replay is strictly source-scoped: an
+    # imported refund can never consume persona debit capacity (or vice versa).
     prior_refunds_qs = Transaction.objects.filter(
         session_id=session_id,
+        source_type=source_type,
         transaction_type='CREDIT',
         transaction_date__gte=lookback_start,
         transaction_date__lt=start
     ).order_by('transaction_date')
-    if not include_persona:
-        prior_refunds_qs = prior_refunds_qs.filter(source_type='import')
 
     for p_tx in prior_refunds_qs:
         if classify_credit(p_tx.normalized_merchant)['credit_type'] != 'refund':
@@ -1237,10 +1455,51 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
     return {
         'year': year,
         'month': month,
+        'has_data': has_data,
+        'data_sufficient': has_data,
+        'transaction_count': tx_count,
+        'reporting_period_derived': reporting_period_derived,
+        'reporting_period': {
+            'year': year,
+            'month': month,
+            'label': f"{calendar.month_name[month]} {year}",
+            'dataset': 'combined' if include_persona else 'import_only',
+            'transaction_count': tx_count,
+            'status': 'OK' if has_data else 'NO_DATA',
+        },
+        'data_completeness': {
+            'status': 'PARTIAL_MONTH' if (has_data and is_partial) else ('OK' if has_data else 'NO_DATA'),
+            'policy': 'ACTUALS_ONLY_NO_EXTRAPOLATION',
+            'is_partial_month': bool(has_data and is_partial),
+        },
+        'statement_period': {
+            'year': year,
+            'month': month,
+            'start_date': min_date.isoformat() if min_date else None,
+            'end_date': max_date.isoformat() if max_date else None,
+            'label': f"{calendar.month_name[month]} {year}",
+        },
+        'data_coverage': data_coverage,
         'income': str(operating_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
         'earned_income': str(earned_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        'business_income': str(business_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        'probable_income': str(business_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
         'investment_yield': str(investment_yield.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
         'operating_income': str(operating_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        'confirmed_operating_income': str(confirmed_operating_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        'probable_operating_income': str(business_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        'operating_income_status': operating_income_status,
+        'operating_income_includes_probable': business_income > 0,
+        'income_classification': {
+            'status': operating_income_status,
+            'confirmed_operating_income': str(confirmed_operating_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'probable_operating_income': str(business_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'probable_income_transaction_count': business_income_count,
+            'unclassified_credit_amount': str(unclassified_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'unclassified_credit_count': unclassified_count,
+            'requires_review': requires_income_review,
+            'note': income_note,
+        },
         'capital_liquidation': str(capital_liquidation.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
         'investment_transfers': str(investment_transfers.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
         'total_credits': str(total_credits.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
@@ -1248,6 +1507,8 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
         'unclassified_inflows': str(unclassified_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
         'credit_breakdown': {
             'earned_income': str(earned_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'business_income': str(business_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+            'probable_income': str(business_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             'investment_yield': str(investment_yield.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             'investment_income': str(investment_yield.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             'capital_liquidation': str(capital_liquidation.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
@@ -1285,6 +1546,7 @@ def monthly_budget(session_id: str, year: int, month: int, include_persona: bool
         'category_spending': cat_spend_str,
         'category_refunds': cat_refund_str,
         'net_category_spending': net_cat_spend,
+        'category_transactions': dict(cat_transactions),
         'refund_details': refund_details,
         'refund_matching_policy': 'CONFIRMED matches (shared reference ID) set allocation_status=APPLIED and reduce net living expenses. PROBABLE matches set allocation_status=SUGGESTED_NOT_APPLIED with allocated_amount=0. WEAK and UNMATCHED set allocation_status=NOT_ALLOCATED.',
         'single_account_limitation_note': 'Single-account analysis: External transfers reflect unlinked inflows/outflows without visibility into counterparty balances.',
@@ -1768,6 +2030,21 @@ def _canonical_display_label(canonical_key: str) -> str:
     key = (canonical_key or '').strip()
     if not key:
         return UNIDENTIFIED_COUNTERPARTY_LABEL
+    special_labels = {
+        'aws_cloud': 'AWS Cloud',
+        'openai': 'OpenAI',
+        'chatgpt': 'ChatGPT',
+        'figma': 'Figma',
+        'adobe': 'Adobe',
+        'github_copilot': 'GitHub Copilot',
+        'github': 'GitHub',
+        'amazon_shopping': 'Amazon Shopping',
+        'amazon_prime': 'Amazon Prime',
+        'amazon_fresh': 'Amazon Fresh',
+        'amazon_pay': 'Amazon Pay',
+    }
+    if key in special_labels:
+        return special_labels[key]
     for _pattern, canonical in _CANONICAL_BRAND_MAP:
         if canonical == key:
             return key.replace('_', ' ').title()
@@ -2081,8 +2358,10 @@ def get_recurring_merchant_key(merchant_text: str) -> Tuple[str, str, str]:
     cleaned = re.sub(r'[^a-zA-Z0-9\s]', ' ', merchant_text.lower())
     norm_text = f" {' '.join(cleaned.split())} "
 
-    # Check Amazon sub-services explicitly to avoid lumping retail into Prime
-    if ' amazon prime ' in norm_text or ' prime video ' in norm_text:
+    # Check AWS / Amazon Web Services explicitly before Amazon retail
+    if ' amazon web services ' in norm_text or ' aws cloud ' in norm_text or ' aws ' in norm_text:
+        return 'aws_cloud', 'aws_cloud', 'AWS Cloud'
+    elif ' amazon prime ' in norm_text or ' prime video ' in norm_text:
         return 'amazon_prime', 'amazon_prime', 'Amazon Prime'
     elif ' amazon fresh ' in norm_text:
         return 'amazon_fresh', 'amazon_fresh', 'Amazon Fresh'
@@ -2358,7 +2637,7 @@ def detect_subscriptions(
                 continue
             cadence = CADENCE_MONTHLY
             median_interval = Decimal('30')
-            confidence = RECURRING_PROBABLE
+            confidence = RECURRING_PROBABLE  # Cautious: single transaction cannot establish confirmed recurring
             candidates = False
             cadence_notes = []
             monthly_cost = avg_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
@@ -2368,11 +2647,11 @@ def detect_subscriptions(
             next_date = _project_calendar_next_date(dates[0], cadence)
             next_date_str = next_date.isoformat() if next_date else None
             is_past_projection = next_date < eval_as_of if next_date else False
-            projection_status = "OVERDUE" if is_past_projection else "UPCOMING"
+            projection_status = "CYCLE_ELAPSED" if is_past_projection else "UPCOMING"
             evidence = [
-                "1 debit occurrence explicitly flagged as recurring subscription in statement metadata",
-                "Single transaction observed; monthly cadence estimated",
-                f"Classification: {payment_type.replace('_', ' ').capitalize()} based on merchant profile",
+                "1 debit occurrence observed; single transaction cannot independently establish a confirmed recurring pattern",
+                "Monthly cadence tentatively estimated based on merchant profile; contractual terms unverified",
+                f"Classification: Possible {payment_type.replace('_', ' ').capitalize()} (Needs verification over multiple statements)",
                 "Recurrence observed from single statement entry; contractual terms unverified",
             ]
         elif len(unique_dates) == 1:
@@ -2400,7 +2679,16 @@ def detect_subscriptions(
             # Determine confidence
             if len(unique_dates) >= 3:
                 if cadence != CADENCE_IRREGULAR and is_consistent:
-                    confidence = RECURRING_CONFIRMED
+                    # Variable amounts at discretionary merchants are everyday spending variations,
+                    # not a confirmed recurrence or commitment. Similar merchant names and fluctuating
+                    # amounts alone (e.g. Swiggy Rs 400, 401, 402) do not establish a confirmed recurring
+                    # pattern. Only fixed subscriptions, utilities, and contractual obligations can be confirmed.
+                    if amount_variation != VARIATION_FIXED and payment_type not in (
+                        PAYMENT_TYPE_SUBSCRIPTION, PAYMENT_TYPE_UTILITY, PAYMENT_TYPE_RENT, PAYMENT_TYPE_EMI, PAYMENT_TYPE_INSURANCE
+                    ):
+                        confidence = RECURRING_PROBABLE
+                    else:
+                        confidence = RECURRING_CONFIRMED
                 elif cadence != CADENCE_IRREGULAR:
                     confidence = RECURRING_PROBABLE
                 else:
@@ -2457,7 +2745,7 @@ def detect_subscriptions(
                     if days_stale > 90:
                         projection_status = "STALE_HISTORY"
                     else:
-                        projection_status = "OVERDUE"
+                        projection_status = "CYCLE_ELAPSED"
                 else:
                     is_past_projection = False
                     projection_status = "UPCOMING"
@@ -2491,7 +2779,7 @@ def detect_subscriptions(
                 if projection_status == "STALE_HISTORY":
                     evidence.append(f"Historical statement: projected date ({next_date_str}) is in the past (last debit {(eval_as_of - unique_dates[-1]).days} days ago)")
                 else:
-                    evidence.append(f"Projected next debit date ({next_date_str}) has passed relative to as-of date ({eval_as_of.isoformat()})")
+                    evidence.append(f"Cadence cycle date ({next_date_str}) has elapsed relative to statement period; awaiting next statement to confirm continuation")
             evidence.append("Recurrence inferred from observed transaction history; not a verified contractual commitment")
 
         if counterparty_class == COUNTERPARTY_UNCERTAIN:
@@ -2621,22 +2909,61 @@ def detect_unusual_spending(session_id: str, include_persona: bool = False) -> L
 
     flagged = []
     for tx in tx_list:
-        peers = [t.amount for t in tx_list if t.id != tx.id]
-        if peers:
-            baseline = _calculate_median(peers)
+        # Exclude internal account transfers
+        if canonical_category_key(tx.category) == 'transfer' or classify_debit(tx.normalized_merchant)['is_transfer']:
+            continue
+
+        cat = resolve_transaction_category(tx)
+        p_type = classify_recurring_payment(tx.normalized_merchant, category_display_name(cat))
+
+        # Fixed contractual obligations (rent and loan EMIs) are known recurring commitments,
+        # not statistical discretionary spending anomalies.
+        if p_type in (PAYMENT_TYPE_RENT, PAYMENT_TYPE_EMI) or cat in ('rent_housing', 'emi'):
+            continue
+
+        # Check for category-specific peer cohort
+        cat_peers = [t.amount for t in tx_list if t.id != tx.id and resolve_transaction_category(t) == cat]
+        if len(cat_peers) >= 3:
+            baseline = _calculate_median(cat_peers)
             threshold = (baseline * Decimal('3')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            if tx.amount > threshold:
-                flagged.append({
-                    'id': str(tx.id),
-                    'reason': 'large_amount',
-                    'amount': str(tx.amount),
-                    'merchant': _display_counterparty(tx.normalized_merchant),
-                    'date': tx.transaction_date.isoformat(),
-                    'source_type': tx.source_type,
-                    'baseline': str(baseline),
-                    'threshold': str(threshold),
-                })
+            cohort_type = 'CATEGORY_COHORT'
+            cohort_label = human_category_label(cat)
+            limitation = None
+        else:
+            # Fall back to discretionary peers excluding transfers and fixed obligations
+            disc_peers = [
+                t.amount for t in tx_list
+                if t.id != tx.id
+                and resolve_transaction_category(t) not in ('rent_housing', 'emi', 'transfer')
+                and not classify_debit(t.normalized_merchant)['is_transfer']
+            ]
+            if not disc_peers:
+                disc_peers = [t.amount for t in tx_list if t.id != tx.id]
+            if not disc_peers:
                 continue
+            baseline = _calculate_median(disc_peers)
+            threshold = (baseline * Decimal('3')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            cohort_type = 'STATEMENT_DISCRETIONARY_COHORT'
+            cohort_label = 'Statement Discretionary Transactions'
+            limitation = f"Category '{human_category_label(cat)}' has insufficient transaction history (<3 entries in statement); evaluated against overall discretionary spending."
+
+        if tx.amount > threshold:
+            flagged.append({
+                'id': str(tx.id),
+                'reason': 'large_amount',
+                'amount': str(tx.amount),
+                'merchant': _display_counterparty(tx.normalized_merchant),
+                'date': tx.transaction_date.isoformat(),
+                'source_type': tx.source_type,
+                'category': human_category_label(cat),
+                'baseline': str(baseline),
+                'threshold': str(threshold),
+                'cohort_type': cohort_type,
+                'cohort_label': cohort_label,
+                'explanation': f"Debit of ₹{tx.amount} exceeds 3x the baseline (₹{baseline}) for {cohort_label}.",
+                'evidence_limitation': limitation,
+            })
+            continue
         candidates = by_identity.get(
             (tx.normalized_merchant, tx.amount, tx.source_type), []
         )
@@ -2701,6 +3028,24 @@ def _derive_statement_period(transactions):
         month_counts[(d.year, d.month)] += 1
     year, month = max(month_counts.items(), key=lambda kv: (kv[1], kv[0][0], kv[0][1]))[0]
     return start_date, end_date, year, month
+
+
+def resolve_reporting_period(session_id: str, include_persona: bool = False) -> Dict[str, Any]:
+    source_type = Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+    txs = list(Transaction.objects.filter(session_id=session_id, source_type=source_type).order_by('transaction_date'))
+    if not txs:
+        return {'status': 'NO_DATA', 'year': None, 'month': None, 'label': None, 'transaction_count': 0}
+    start_date, end_date, year, month = _derive_statement_period(txs)
+    return {
+        'status': 'OK',
+        'year': year,
+        'month': month,
+        'label': f"{calendar.month_name[month]} {year}",
+        'start_date': start_date.isoformat() if start_date else None,
+        'end_date': end_date.isoformat() if end_date else None,
+        'transaction_count': len(txs),
+        'dataset': 'combined' if include_persona else 'import_only',
+    }
 
 
 def _resolve_display_category(t) -> str:
@@ -2843,6 +3188,35 @@ def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
         safe_to_spend_status = 'INSUFFICIENT_DATA'
         safe_to_spend_reason = safe.get('insufficient_reason')
 
+    # ----- Metric coverage transparency ---------------------------------
+    # The imported statement has no verified current balance in this schema.
+    # Report that limitation explicitly and never present the derived score as
+    # a fully observed grade. The raw rule-based grade is retained separately
+    # for auditability.
+    coverage_limitations = []
+    if not liquid_balance_known:
+        coverage_limitations.append('LIQUID_BALANCE_UNAVAILABLE')
+        coverage_limitations.append('EMERGENCY_RUNWAY_WITHHELD')
+    if days_remaining <= 0:
+        coverage_limitations.append('STATEMENT_PERIOD_ENDED')
+    if monthly_income <= 0 and monthly_expenses <= 0:
+        coverage_limitations.append('INSUFFICIENT_TRANSACTION_DATA')
+    if safe_to_spend_status != 'AVAILABLE':
+        coverage_limitations.append('SAFE_TO_SPEND_UNAVAILABLE')
+
+    health['grade_raw'] = health.get('grade')
+    health['health_status'] = 'ESTIMATED'
+    if monthly_income <= 0 and monthly_expenses <= 0:
+        health['health_status'] = 'INSUFFICIENT_DATA'
+        health['grade'] = 'STATUS UNAVAILABLE'
+    elif not liquid_balance_known:
+        health['grade'] = 'ESTIMATED — NO VERIFIED BALANCE'
+    else:
+        health['health_status'] = 'OBSERVED'
+    if health['health_status'] != 'OBSERVED':
+        coverage_limitations.append('HEALTH_SCORE_ESTIMATED')
+    health['coverage_limitations'] = coverage_limitations
+
     tx_rows = []
     for t in txs:
         # An own-account transfer keeps its place in the ledger but is labelled
@@ -2897,6 +3271,7 @@ def compute_imported_session_overview(session_id: str) -> Dict[str, Any]:
         },
         'data_coverage': coverage,
         'budget': budget,
+        'coverage_limitations': coverage_limitations,
         'health_metrics': {
             **health,
             'liquid_balance_known': liquid_balance_known,
@@ -2959,6 +3334,7 @@ def compute_dataset_financial_metrics(
         'monthly_expenses': 0.0,
         'health_score': None,
         'health_grade': None,
+        'health_status': 'INSUFFICIENT_DATA',
         'emergency_runway_months': None,
         'runway_status': 'INSUFFICIENT_DATA',
         'balance_source': None,
@@ -2976,6 +3352,7 @@ def compute_dataset_financial_metrics(
             'recurring': 'EVIDENCE_BASED_DETECTION',
             'runway': 'WITHHELD',
         },
+        'coverage_limitations': ['LIQUID_BALANCE_UNAVAILABLE', 'EMERGENCY_RUNWAY_WITHHELD'],
     }
     if not txs:
         base['insufficient_reason'] = (
@@ -3061,6 +3438,11 @@ def compute_dataset_financial_metrics(
         'monthly_expenses': float(monthly_expenses.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
         'health_score': health.get('health_score') if health else None,
         'health_grade': health_grade,
+        'health_status': (
+            'ESTIMATED' if health and include_persona
+            else 'OBSERVED' if health
+            else 'INSUFFICIENT_DATA'
+        ),
         'emergency_runway_months': runway,
         'runway_status': runway_status,
         'balance_source': balance_source,
@@ -3079,6 +3461,10 @@ def compute_dataset_financial_metrics(
             'runway': 'PERSONA_SCENARIO_ESTIMATE' if include_persona and runway is not None else 'WITHHELD',
             'health_score': 'PERSONA_SCENARIO_ESTIMATE' if include_persona and health else None,
         },
+        'coverage_limitations': (
+            ['PERSONA_SCENARIO_ESTIMATE']
+            if include_persona else ['LIQUID_BALANCE_UNAVAILABLE', 'EMERGENCY_RUNWAY_WITHHELD']
+        ),
     })
     if runway is None:
         base['insufficient_reason'] = 'BALANCE_UNAVAILABLE_FOR_SELECTED_DATASET'
@@ -3150,9 +3536,12 @@ def generate_evidence_briefing(session_id: str, include_persona: bool = False) -
     import calendar as _cal
 
     # ----- Resolve transactions & period ---------------------------------
-    qs = Transaction.objects.filter(session_id=session_id)
-    if not include_persona:
-        qs = qs.filter(source_type='import')
+    # Source-scoped in both directions. Persona and imported ledgers may coexist
+    # in one session, so this is a strict boundary rather than a default.
+    source_type = (
+        Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+    )
+    qs = Transaction.objects.filter(session_id=session_id, source_type=source_type)
     txs = list(qs.order_by('transaction_date'))
 
     if not txs:
@@ -3426,11 +3815,13 @@ def generate_evidence_briefing(session_id: str, include_persona: bool = False) -
 
     # 6. INCOME_ANALYSIS
     earned_income = Decimal(budget.get('earned_income', '0'))
+    business_income = Decimal(budget.get('business_income', '0'))
     investment_yield = Decimal(budget.get('investment_yield', '0'))
     total_credits = Decimal(budget.get('total_credits', '0'))
     refunds_received = Decimal(budget.get('refunds_received', '0'))
     credit_breakdown = budget.get('credit_breakdown', {})
     unclassified_credits = Decimal(credit_breakdown.get('unclassified', '0'))
+    income_classification = budget.get('income_classification', {})
 
     if total_credits > 0:
         income_sources = {
@@ -3454,6 +3845,15 @@ def generate_evidence_briefing(session_id: str, include_persona: bool = False) -
                     f"No earned or investment income detected in {period_label}. "
                     f"Total inflows of \u20b9{total_credits.quantize(Decimal('0.01'))} are from non-income sources."
                 )
+        elif business_income > 0:
+            severity = 'MEDIUM'
+            finding = (
+                f"Operating income of \u20b9{operating_income.quantize(Decimal('0.01'))} in "
+                f"{period_label} includes \u20b9{business_income.quantize(Decimal('0.01'))} of "
+                f"probable business/freelance receipts from "
+                f"{income_classification.get('probable_income_transaction_count', 0)} "
+                f"corporate bank-rail credit(s) pending verification."
+            )
         elif unclassified_credits > 0:
             finding = (
                 f"Total credits of \u20b9{total_credits.quantize(Decimal('0.01'))}: "
@@ -3468,8 +3868,19 @@ def generate_evidence_briefing(session_id: str, include_persona: bool = False) -
         else:
             finding = f"Operating income of \u20b9{operating_income.quantize(Decimal('0.01'))} in {period_label}."
 
-        # Build transparent explanation with unclassified reconciliation
-        if unclassified_credits > 0:
+        # Build transparent explanation with classified/unclassified reconciliation
+        if business_income > 0:
+            explanation = (
+                f"Total credits of \u20b9{total_credits.quantize(Decimal('0.01'))} include "
+                f"probable business/freelance receipts (\u20b9{business_income.quantize(Decimal('0.01'))}), "
+                f"confirmed earned income (\u20b9{earned_income.quantize(Decimal('0.01'))}), "
+                f"investment yields (\u20b9{investment_yield.quantize(Decimal('0.01'))}), "
+                f"refunds (\u20b9{refunds_received.quantize(Decimal('0.01'))}) "
+                f"and unclassified credits (\u20b9{unclassified_credits.quantize(Decimal('0.01'))}). "
+                f"Probable receipts are shown in operating income but marked for review; "
+                f"they are not treated as confirmed payroll."
+            )
+        elif unclassified_credits > 0:
             explanation = (
                 f"Total credits of \u20b9{total_credits.quantize(Decimal('0.01'))} include "
                 f"\u20b9{operating_income.quantize(Decimal('0.01'))} recognised operating income "
@@ -3494,20 +3905,25 @@ def generate_evidence_briefing(session_id: str, include_persona: bool = False) -
                 'total_credits': str(total_credits.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
                 'operating_income': str(operating_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
                 'earned_income': str(earned_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'business_income': str(business_income.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
                 'investment_yield': str(investment_yield.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
                 'refunds_received': str(refunds_received.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
                 'unclassified_credits': str(unclassified_credits.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+                'operating_income_status': income_classification.get('status'),
                 'income_sources': income_sources,
                 'period': period_label,
             },
             'explanation': explanation,
             'action': (
+                "Confirm whether the corporate bank-rail credits are client or project receipts; "
+                "attach contract or invoice evidence before relying on the operating surplus."
+            ) if business_income > 0 else (
                 "Review unclassified credits to determine whether they represent earned income, "
                 "client payments, or other inflows. Diversify income sources when possible."
             ) if unclassified_credits > 0 else (
                 "Diversify income sources when possible. Track investment returns separately for tax planning."
             ),
-            'confidence': 'VERIFIED',
+            'confidence': 'PROBABLE' if business_income > 0 else 'VERIFIED',
         })
 
     # 7. REFUND_WATCH

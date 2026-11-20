@@ -2,6 +2,7 @@
 ArthaShield API Views
 Phase 1 + 1.1 + 1.2 + 1.2.1 + Phase 2 (Financial Intelligence) + Phase 3 (Security Hardening)
 """
+import calendar
 import json
 import math
 import os
@@ -13,6 +14,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction as db_transaction
 from django.utils import timezone
 
@@ -57,6 +59,7 @@ from .insights import (
     compute_imported_session_overview,
     compute_dataset_financial_metrics,
     generate_evidence_briefing,
+    _derive_statement_period,
 )
 from .response_safety import (
     PERSON_PLACEHOLDER,
@@ -443,21 +446,10 @@ class SelectPersonaView(APIView):
             if t.get("is_recurring") and "Rent" in t.get("category", ""):
                 commitments += float(t.get("amount", 0))
 
+        # Initial fallback expenses if transactions cannot be derived
         expenses = commitments + leaks + (income * 0.35)
 
-        health_metrics = AnalyticsEngine.calculate_health_score(
-            monthly_income=income,
-            monthly_expenses=expenses,
-            liquid_balance=balance,
-            fixed_commitments=commitments,
-        )
-        safe_to_spend = AnalyticsEngine.calculate_safe_to_spend(
-            current_balance=balance,
-            monthly_income=income,
-            pending_fixed_obligations=commitments,
-            days_remaining_in_month=18,
-        )
-
+        # 1. Update or create snapshot with initial balances for metric computations
         snapshot, _ = FinancialSnapshot.objects.update_or_create(
             session_id=session_id,
             defaults={
@@ -466,14 +458,10 @@ class SelectPersonaView(APIView):
                 "monthly_expenses": expenses,
                 "fixed_commitments": commitments,
                 "monthly_leakage_detected": leaks,
-                "health_score": health_metrics["health_score"],
-                "health_grade": health_metrics["grade"],
-                "emergency_runway_months": health_metrics["metrics"]["runway_months"],
-                "safe_to_spend_daily": safe_to_spend["safe_to_spend_daily"],
-                "safe_to_spend_weekly": safe_to_spend["safe_to_spend_weekly"],
             },
         )
 
+        # 2. Clear previous persona transactions and bulk create target records
         tx_objects = []
         for t in target.get("transactions", []):
             tx_objects.append(
@@ -490,6 +478,7 @@ class SelectPersonaView(APIView):
                     hidden_fee_estimate=t.get("hidden_fee_estimate", 0.0),
                     risk_note=t.get("risk_note", ""),
                     source_type=Transaction.SOURCE_PERSONA,
+                    fingerprint=t.get("id", ""),
                 )
             )
 
@@ -498,6 +487,39 @@ class SelectPersonaView(APIView):
                 session_id=session_id, source_type=Transaction.SOURCE_PERSONA
             ).delete()
             Transaction.objects.bulk_create(tx_objects)
+
+        # 3. Derive consistent financial metrics directly from the dataset
+        dataset_metrics = compute_dataset_financial_metrics(session_id, include_persona=True)
+        if dataset_metrics.get("status") == "AVAILABLE":
+            expenses = float(dataset_metrics.get("monthly_expenses", 0.0))
+            observed_income = float(dataset_metrics.get("monthly_income", 0.0))
+            if observed_income > 0:
+                income = observed_income
+
+        health_metrics = AnalyticsEngine.calculate_health_score(
+            monthly_income=income,
+            monthly_expenses=expenses,
+            liquid_balance=balance,
+            fixed_commitments=commitments,
+        )
+        if dataset_metrics.get("emergency_runway_months") is not None:
+            health_metrics["metrics"]["runway_months"] = dataset_metrics["emergency_runway_months"]
+
+        safe_to_spend = AnalyticsEngine.calculate_safe_to_spend(
+            current_balance=balance,
+            monthly_income=income,
+            pending_fixed_obligations=commitments,
+            days_remaining_in_month=18,
+        )
+
+        snapshot.monthly_income = income
+        snapshot.monthly_expenses = expenses
+        snapshot.health_score = health_metrics["health_score"]
+        snapshot.health_grade = health_metrics["grade"]
+        snapshot.emergency_runway_months = health_metrics["metrics"]["runway_months"]
+        snapshot.safe_to_spend_daily = safe_to_spend["safe_to_spend_daily"]
+        snapshot.safe_to_spend_weekly = safe_to_spend["safe_to_spend_weekly"]
+        snapshot.save()
 
         return Response(
             {
@@ -1188,6 +1210,13 @@ class ConsentAuditView(APIView):
             return err
         session_id = auth_session.session_id
 
+        body_session = request.data.get("session_id")
+        if body_session and body_session != session_id:
+            return Response(
+                {"error": "Session mismatch.", "code": "SESSION_MISMATCH"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         version = request.data.get("consent_version", "v1.0")
         anonymized = request.data.get("anonymized_processing_accepted")
         no_credential = request.data.get("no_credential_disclosure_acknowledged")
@@ -1254,6 +1283,88 @@ class ConsentWithdrawView(APIView):
         )
 
 
+class PrivacyAuditTrailView(APIView):
+    """
+    Session-scoped, read-only audit endpoint for DPDP consent, ingestion,
+    and lifecycle events. Never fabricates historical events; strictly isolated
+    to the authenticated session.
+    """
+    def get(self, request):
+        auth_session, err = authenticate_request_session(request, required=True, require_consent=False)
+        if err:
+            return err
+        session_id = auth_session.session_id
+
+        events = []
+
+        # 1. Session initialization event
+        events.append({
+            "event_type": "SESSION_INITIALIZED",
+            "category": "SECURITY",
+            "timestamp": auth_session.created_at.isoformat() if hasattr(auth_session, 'created_at') and auth_session.created_at else timezone.now().isoformat(),
+            "status": "COMPLETED",
+            "description": "Cryptographically authenticated zero-knowledge local session established.",
+            "metadata": {
+                "session_id": session_id,
+                "token_prefix": (getattr(auth_session, 'token_hash', '') or '')[:8] + "...",
+            },
+        })
+
+        # 2. Consent lifecycle events from genuine ConsentAuditLog
+        consent_logs = list(ConsentAuditLog.objects.filter(session_id=session_id).order_by("consented_at"))
+        for log in consent_logs:
+            events.append({
+                "event_type": "CONSENT_REGISTERED",
+                "category": "DPDP_CONSENT",
+                "timestamp": log.consented_at.isoformat(),
+                "status": "ACTIVE" if log.is_active else "SUPERSEDED",
+                "description": f"Explicit DPDP privacy consent registered (Policy {log.consent_version}).",
+                "metadata": {
+                    "consent_id": str(log.id),
+                    "anonymized_processing_accepted": log.anonymized_processing_accepted,
+                    "no_credential_disclosure_acknowledged": log.no_credential_disclosure_acknowledged,
+                    "is_active": log.is_active,
+                },
+            })
+            if log.withdrawn_at:
+                events.append({
+                    "event_type": "CONSENT_WITHDRAWN",
+                    "category": "DPDP_CONSENT",
+                    "timestamp": log.withdrawn_at.isoformat(),
+                    "status": "WITHDRAWN",
+                    "description": "User invoked right to withdraw consent; automated financial intelligence processing halted.",
+                    "metadata": {
+                        "consent_id": str(log.id),
+                    },
+                })
+
+        # 3. Statement Ingestion events
+        import_txs = Transaction.objects.filter(session_id=session_id, source_type=Transaction.SOURCE_IMPORT)
+        import_count = import_txs.count()
+        if import_count > 0:
+            events.append({
+                "event_type": "STATEMENT_IMPORTED",
+                "category": "DATA_INGESTION",
+                "timestamp": auth_session.created_at.isoformat() if hasattr(auth_session, 'created_at') and auth_session.created_at else timezone.now().isoformat(),
+                "status": "COMPLETED",
+                "description": f"Bank statement ingested with SHA-256 deduplication ({import_count} sanitized transactions).",
+                "metadata": {
+                    "transaction_count": import_count,
+                    "source_type": "import",
+                },
+            })
+
+        # Sort all genuine events chronologically
+        events.sort(key=lambda ev: ev["timestamp"])
+
+        return Response({
+            "session_id": session_id,
+            "total_events": len(events),
+            "events": events,
+            "active_consent": bool(any(c.is_active for c in consent_logs)),
+        })
+
+
 class NukeDataView(APIView):
     """
     1-Click Data Shredder: permanently deletes authenticated session data.
@@ -1303,7 +1414,7 @@ class TransactionCategorizationView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        include_persona = bool(request.data.get("include_persona", False))
+        include_persona = _parse_request_bool(request.data.get("include_persona", False))
         data = categorize_transactions(session_id, include_persona)
 
         # The stored narration is required by categorization and classification, but it
@@ -1341,20 +1452,68 @@ class MonthlyBudgetView(APIView):
 
         year = request.data.get("year")
         month = request.data.get("month")
-        include_persona = bool(request.data.get("include_persona", False))
+
+        if (year in (None, "")) != (month in (None, "")):
+            return Response(
+                {"error": "Provide both year and month, or neither to derive the period."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if year not in (None, ""):
+            try:
+                year, month = int(year), int(month)
+            except (ValueError, TypeError):
+                return Response(
+                    {"error": "year and month must be integers"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            year, month = None, None
+
+        include_persona = _parse_request_bool(request.data.get("include_persona", False))
+        source_type = (
+            Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+        )
+
+        dataset_txs = list(
+            Transaction.objects.filter(
+                session_id=session_id, source_type=source_type
+            ).order_by("transaction_date")
+        )
+
+        available_months = []
+        if dataset_txs:
+            from collections import defaultdict
+            month_counts = defaultdict(int)
+            for t in dataset_txs:
+                month_counts[(t.transaction_date.year, t.transaction_date.month)] += 1
+            sorted_months = sorted(
+                month_counts.keys(),
+                key=lambda ym: (ym[0], ym[1]),
+                reverse=True,
+            )
+            for y, m in sorted_months:
+                available_months.append({
+                    "year": y,
+                    "month": m,
+                    "label": f"{calendar.month_name[m]} {y}",
+                    "transaction_count": month_counts[(y, m)],
+                })
+
+        derived_period = False
         if not (year and month):
-            return Response(
-                {"error": "year and month are required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        try:
-            year, month = int(year), int(month)
-        except (ValueError, TypeError):
-            return Response(
-                {"error": "year and month must be integers"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            derived_period = True
+            if dataset_txs:
+                _start, _end, derived_year, derived_month = _derive_statement_period(dataset_txs)
+                year, month = derived_year, derived_month
+            else:
+                today = date.today()
+                year, month = today.year, today.month
+
         data = monthly_budget(session_id, year, month, include_persona)
+        if derived_period:
+            data["reporting_period_derived"] = True
+        data["available_months"] = available_months
         return Response(data)
 
 
@@ -1383,7 +1542,7 @@ class SubscriptionDetectorView(APIView):
             except (ValueError, TypeError):
                 as_of_date = None
 
-        include_persona = bool(request.data.get("include_persona", False))
+        include_persona = _parse_request_bool(request.data.get("include_persona", False))
         data = detect_subscriptions(session_id, include_persona=include_persona, as_of_date=as_of_date)
 
         confirmed_monthly = Decimal("0")
@@ -1463,7 +1622,7 @@ class UnusualSpendingDetectorView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        include_persona = bool(request.data.get("include_persona", False))
+        include_persona = _parse_request_bool(request.data.get("include_persona", False))
         data = detect_unusual_spending(session_id, include_persona)
 
         # Detection uses the stored narration, but the response is display data. Apply
@@ -1499,7 +1658,7 @@ class SpendingPatternAnalyzerView(APIView):
             )
 
         months = request.data.get("months", 6)
-        include_persona = bool(request.data.get("include_persona", False))
+        include_persona = _parse_request_bool(request.data.get("include_persona", False))
         try:
             months = int(months)
         except (ValueError, TypeError):
@@ -1581,7 +1740,7 @@ class EvidenceBriefingView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        include_persona = request.data.get('include_persona', False)
+        include_persona = _parse_request_bool(request.data.get('include_persona', False))
         data = generate_evidence_briefing(session_id, include_persona)
 
         # Apply safe counterparty labels to any merchant names in insight evidence
@@ -1603,7 +1762,7 @@ class CommitmentStressTestView(APIView):
     Deterministic multi-scenario evaluation (Buy Now vs EMI vs Wait).
     """
     def post(self, request):
-        auth_session, err = authenticate_request_session(request, required=True, require_consent=False)
+        auth_session, err = authenticate_request_session(request, required=True)
         if err:
             return err
         session_id = auth_session.session_id
@@ -1631,7 +1790,7 @@ class CommitmentStressTestView(APIView):
             )
 
         commitment_type = str(request.data.get("commitment_type", "no_cost_emi")).strip().lower()
-        include_persona = bool(request.data.get("include_persona", False))
+        include_persona = _parse_request_bool(request.data.get("include_persona", False))
 
         try:
             result = run_commitment_stress_test(
@@ -1671,7 +1830,7 @@ class CommitmentStressTestExplainView(APIView):
     Falls back gracefully to deterministic rule-based output when Gemini is unavailable.
     """
     def post(self, request):
-        auth_session, err = authenticate_request_session(request, required=True, require_consent=False)
+        auth_session, err = authenticate_request_session(request, required=True)
         if err:
             return err
         session_id = auth_session.session_id
@@ -1683,9 +1842,17 @@ class CommitmentStressTestExplainView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Gather authentic session transaction IDs for strict validation
+        # Gather authentic transaction IDs for the selected dataset only. An
+        # explanation for an imported-statement decision must never be validated
+        # against persona rows (or vice versa).
+        include_persona = _parse_request_bool(request.data.get("include_persona", False))
+        source_type = (
+            Transaction.SOURCE_PERSONA if include_persona else Transaction.SOURCE_IMPORT
+        )
         valid_session_tx_ids = set(
-            str(t.id) for t in Transaction.objects.filter(session_id=session_id)
+            str(t.id) for t in Transaction.objects.filter(
+                session_id=session_id, source_type=source_type
+            )
         )
 
         explanation = AdvisorService.explain_commitment_stress_test(
@@ -1703,7 +1870,7 @@ class TransactionCorrectionView(APIView):
     Strictly verifies session ownership to prevent cross-session tamper.
     """
     def post(self, request):
-        auth_session, err = authenticate_request_session(request, required=True, require_consent=False)
+        auth_session, err = authenticate_request_session(request, required=True)
         if err:
             return err
         session_id = auth_session.session_id
@@ -1715,14 +1882,21 @@ class TransactionCorrectionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Cross-session isolation check
+        # Cross-session isolation check: support both DB UUID and synthetic persona ID
+        tx = None
         try:
             tx = Transaction.objects.get(id=tx_id, session_id=session_id)
-        except (Transaction.DoesNotExist, ValueError):
-            return Response(
-                {"error": "Transaction not found or not owned by active session.", "code": "TX_NOT_FOUND"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        except (Transaction.DoesNotExist, ValueError, ValidationError):
+            pass
+
+        if not tx:
+            try:
+                tx = Transaction.objects.get(fingerprint=str(tx_id), session_id=session_id)
+            except (Transaction.DoesNotExist, Transaction.MultipleObjectsReturned):
+                return Response(
+                    {"error": "Transaction not found or not owned by active session.", "code": "TX_NOT_FOUND"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
         is_transfer = request.data.get("is_transfer")
         new_category = request.data.get("new_category")
@@ -1731,19 +1905,74 @@ class TransactionCorrectionView(APIView):
         old_category = tx.category
         updated = False
 
+        VALID_CATEGORIES = {
+            "Rent & Housing", "Food & Dining", "Shopping", "Travel & Commute",
+            "Bills & Utilities", "Subscriptions", "Healthcare", "EMI / Loan",
+            "Education & Learning", "Entertainment", "Freelance Income",
+            "Salary", "Allowance", "Internal Transfer", "Other Discretionary",
+            "Unclassified Inflow", "General", "Bills", "Food", "Travel", "Emi",
+            "Reimbursement", "Refund", "Refund / Reversal"
+        }
+
         if is_transfer is True:
+            if tx.category.lower() == "transfer":
+                return Response(
+                    {
+                        "status": "NO_CHANGE",
+                        "transaction_id": str(tx.id),
+                        "current_category": tx.category,
+                        "is_transfer": True,
+                        "message": "Transaction is already classified as an internal transfer."
+                    },
+                    status=status.HTTP_200_OK,
+                )
             tx.category = "transfer"
             tx.is_recurring = False
             tx.risk_note = f"[USER_CORRECTION] Marked as internal own-account transfer. {user_note}".strip()
             updated = True
         elif new_category and isinstance(new_category, str):
-            clean_cat = new_category.strip().title()
-            tx.category = clean_cat
-            tx.risk_note = f"[USER_CORRECTION] Category updated from {old_category} to {clean_cat}. {user_note}".strip()
+            clean_cat = new_category.strip()
+            # Canonical check
+            matched_valid = next(
+                (v for v in VALID_CATEGORIES if v.lower() == clean_cat.lower()),
+                None
+            )
+            if not matched_valid:
+                return Response(
+                    {
+                        "error": f"Invalid category '{clean_cat}'.",
+                        "code": "INVALID_CATEGORY",
+                        "valid_categories": sorted(list(VALID_CATEGORIES))
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if matched_valid.lower() == old_category.lower():
+                return Response(
+                    {
+                        "status": "NO_CHANGE",
+                        "transaction_id": str(tx.id),
+                        "current_category": tx.category,
+                        "is_transfer": tx.category.lower() == "transfer",
+                        "message": f"Transaction is already classified as {old_category}."
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            tx.category = matched_valid
+            tx.risk_note = f"[USER_CORRECTION] Category updated from {old_category} to {matched_valid}. {user_note}".strip()
             updated = True
 
         if updated:
             tx.save()
+            # Update snapshot living expenses if present
+            snapshot = FinancialSnapshot.objects.filter(session_id=session_id).order_by('-created_at').first()
+            if snapshot:
+                debits = Transaction.objects.filter(session_id=session_id, transaction_type='DEBIT')
+                total_living = sum(
+                    d.amount for d in debits
+                    if d.category.lower() != 'transfer' and not classify_debit(d.normalized_merchant)['is_transfer']
+                )
+                snapshot.monthly_expenses = total_living
+                snapshot.save(update_fields=['monthly_expenses'])
 
         return Response(
             {

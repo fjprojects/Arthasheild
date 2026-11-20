@@ -57,6 +57,17 @@ class AdvancedSessionLifecycleTests(TestCase):
         self.assertNotEqual(session_a_id, session_b_id)
         self.assertNotEqual(token_a, token_b)
 
+        # Both sessions must have active consent; otherwise the analysis guard
+        # returns 403 before the ownership check can run.
+        for session_id in (session_a_id, session_b_id):
+            ConsentAuditLog.objects.create(
+                session_id=session_id,
+                consent_version="v1.0",
+                anonymized_processing_accepted=True,
+                no_credential_disclosure_acknowledged=True,
+                is_active=True,
+            )
+
         # Populate a transaction owned by Session A
         snap_a = FinancialSnapshot.objects.create(session_id=session_a_id, liquid_balance=Decimal("50000.00"))
         tx_a = Transaction.objects.create(

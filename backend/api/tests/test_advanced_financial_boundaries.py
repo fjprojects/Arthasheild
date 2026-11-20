@@ -99,6 +99,7 @@ class FinancialBoundaryTests(TestCase):
             item_name="Exact Balance Purchase",
             price=50000.0,
             commitment_type="large_purchase",
+            custom_liquid_balance=50000.0,
             as_of_date=self.today,
         )
         # Remaining balance becomes 0.00
@@ -114,6 +115,7 @@ class FinancialBoundaryTests(TestCase):
             item_name="Deficit Purchase",
             price=55000.0,
             commitment_type="large_purchase",
+            custom_liquid_balance=50000.0,
             as_of_date=self.today,
         )
         self.assertEqual(res["scenario_a_buy_now"]["projected_remaining_balance"], -5000.0)
@@ -169,6 +171,7 @@ class FinancialBoundaryTests(TestCase):
             price=15000.0,
             commitment_type="no_cost_emi",
             tenure_months=6,
+            custom_liquid_balance=200000.0,
             as_of_date=self.today,
         )
         # Discretionary buffer is 0.00, EMI cannot be absorbed
@@ -183,6 +186,7 @@ class FinancialBoundaryTests(TestCase):
             session_id=self.session_id,
             price=20000.0,
             commitment_type="large_purchase",
+            custom_liquid_balance=150000.0,
             as_of_date=self.today,
         )
         self.assertEqual(res["baseline"]["existing_fixed_obligations"], 0.0)
@@ -196,6 +200,7 @@ class FinancialBoundaryTests(TestCase):
             session_id=self.session_id,
             price=10000000.0, # 1 Crore INR
             commitment_type="large_purchase",
+            custom_liquid_balance=100000.0,
             as_of_date=self.today,
         )
         self.assertEqual(res["scenario_a_buy_now"]["verdict"], "NOT SAFE")
@@ -312,6 +317,7 @@ class FinancialBoundaryTests(TestCase):
             session_id=self.session_id,
             price=40000.0,
             commitment_type="large_purchase",
+            custom_liquid_balance=100000.0,
             as_of_date=self.today,
         )
         baseline = res["baseline"]

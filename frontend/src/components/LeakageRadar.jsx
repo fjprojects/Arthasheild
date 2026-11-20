@@ -103,13 +103,7 @@ export default function LeakageRadar({
     : 'LIVE';
 
   let items = [];
-  let confirmedMonthly = 0;   // evidence-backed commitments (subscription + fixed obligation)
-  let probableMonthly = 0;   // probable commitments pending review
-  let avoidableMonthly = 0;   // confirmed recurring payments eligible for review
-  let essentialMonthly = 0;   // obligations: rent, instalment, insurance, utility
-  let patternMonthly = 0;   // repeated discretionary spending - observed, not a commitment
   let scenarioReviewMonthly = 0; // static persona scenario only, never evidence
-  let weakCount = 0;
 
   if (currentMode === 'LIVE' && hasLive) {
     items = liveSubs.map(s => {
@@ -120,26 +114,18 @@ export default function LeakageRadar({
         ? parseFloat(s.estimated_annual_cost)
         : null;
 
-      const conf = s.confidence || 'PROBABLE';
+      const evidenceIds = Array.isArray(s.candidate_transaction_ids) ? s.candidate_transaction_ids : [];
+      const occurrenceCount = s.occurrence_count || evidenceIds.length || 1;
+      const rawConf = s.confidence || 'PROBABLE';
+      // A confirmed recurring commitment requires repeated observed dates. A
+      // single debit is always a probable candidate, never a confirmed charge.
+      const conf = rawConf === 'CONFIRMED' && occurrenceCount < 3 ? 'PROBABLE' : rawConf;
       const pType = s.payment_type || 'subscription';
       const commitmentClass = s.commitment_class || null;
-      const isCommitment = s.is_financial_commitment === true;
-      const isAvoidable = s.is_potential_leakage === true;
+      const isCommitment = conf === 'CONFIRMED' && s.is_financial_commitment === true;
+      const isAvoidable = conf === 'CONFIRMED' && s.is_potential_leakage === true;
       const isPattern = commitmentClass === 'recurring_discretionary' || commitmentClass === 'recurring_pattern';
       const isEssential = ['rent', 'emi_or_loan', 'utility', 'insurance'].includes(pType);
-      const evidenceIds = Array.isArray(s.candidate_transaction_ids) ? s.candidate_transaction_ids : [];
-
-      if (conf === 'CONFIRMED' && mCost !== null && isCommitment) {
-        confirmedMonthly += mCost;
-        if (isAvoidable) avoidableMonthly += mCost;
-        if (isEssential) essentialMonthly += mCost;
-      } else if (conf === 'CONFIRMED' && mCost !== null && isPattern) {
-        patternMonthly += mCost;
-      } else if (conf === 'PROBABLE' && mCost !== null) {
-        probableMonthly += mCost;
-      } else if (conf === 'WEAK') {
-        weakCount += 1;
-      }
 
       return {
         service: s.merchant || s.identifier,
@@ -156,10 +142,10 @@ export default function LeakageRadar({
         is_essential: isEssential,
         cadence: s.cadence || 'monthly',
         confidence: conf,
-        recurrence_confidence: s.recurrence_confidence || conf,
+        recurrence_confidence: s.recurrence_confidence || rawConf,
         amount_variation: s.amount_variation || 'fixed',
         amount_range: s.observed_amount_range || null,
-        occurrence_count: s.occurrence_count || evidenceIds.length || 1,
+        occurrence_count: occurrenceCount,
         next_date: s.estimated_next_date,
         is_past_projection: s.is_past_projection,
         projection_status: s.projection_status,
@@ -211,20 +197,65 @@ export default function LeakageRadar({
   // above (and in the evidence detector when their ledger rows are present).
   // They are always review payments, never verified savings.
 
-  const confirmedAnnual = confirmedMonthly * 12;
+  // Derive every aggregate from the resolved rows in one immutable pass, so no
+  // outer-scope variable is reassigned after render.
+  const {
+    confirmedMonthly,
+    probableMonthly,
+    avoidableMonthly,
+    essentialMonthly,
+    patternMonthly,
+    weakCount,
+    confirmedCount,
+    probableCount,
+    observedDebitCount,
+  } = items.reduce(
+    (acc, item) => {
+      const cost = item.monthly_cost;
+      if (item.confidence === 'CONFIRMED' && cost !== null && item.is_commitment) {
+        acc.confirmedCount += 1;
+        acc.confirmedMonthly += cost;
+        if (item.is_avoidable) acc.avoidableMonthly += cost;
+        if (item.is_essential) acc.essentialMonthly += cost;
+      } else if (item.confidence === 'CONFIRMED' && cost !== null && item.is_pattern) {
+        acc.confirmedCount += 1;
+        acc.patternMonthly += cost;
+      } else if (item.confidence === 'PROBABLE' && cost !== null) {
+        acc.probableCount += 1;
+        acc.probableMonthly += cost;
+      } else if (item.confidence === 'WEAK') {
+        acc.weakCount += 1;
+      }
+      acc.observedDebitCount += item.occurrence_count || 0;
+      return acc;
+    },
+    {
+      confirmedMonthly: 0,
+      probableMonthly: 0,
+      avoidableMonthly: 0,
+      essentialMonthly: 0,
+      patternMonthly: 0,
+      weakCount: 0,
+      confirmedCount: 0,
+      probableCount: 0,
+      observedDebitCount: 0,
+    },
+  );
 
-  const getConfidenceBadge = (confidence) => {
+  const getConfidenceBadge = (confidence, count = null) => {
     switch (confidence) {
       case 'CONFIRMED':
         return (
           <span className="border border-emerald-500/60 bg-emerald-950/40 text-emerald-300 text-[9px] font-mono uppercase px-2 py-0.5 tracking-wider font-bold">
-            CONFIRMED
+            {count && count >= 3
+              ? `CONFIRMED RECURRING COMMITMENT (${count} DEBITS)`
+              : 'PROBABLE RECURRING-PAYMENT CANDIDATE — OCCURRENCES INSUFFICIENT'}
           </span>
         );
       case 'PROBABLE':
         return (
           <span className="border border-amber-500/60 bg-amber-950/40 text-amber-300 text-[9px] font-mono uppercase px-2 py-0.5 tracking-wider font-bold">
-            PROBABLE
+            PROBABLE RECURRING-PAYMENT CANDIDATE{count ? ` (${count} DEBIT${count === 1 ? '' : 'S'})` : ''}
           </span>
         );
       case 'UNVERIFIED':
@@ -236,8 +267,8 @@ export default function LeakageRadar({
       case 'WEAK':
       default:
         return (
-          <span className="border border-zinc-700 bg-zinc-900 text-zinc-400 text-[9px] font-mono uppercase px-2 py-0.5 tracking-wider font-bold">
-            WEAK (OBSERVATION)
+          <span className="border border-zinc-600 bg-zinc-900 text-zinc-300 text-[9px] font-mono uppercase px-2 py-0.5 tracking-wider font-bold">
+            POSSIBLE / NEEDS VERIFICATION {count ? `(${count} DEBIT${count > 1 ? 'S' : ''})` : ''}
           </span>
         );
     }
@@ -263,7 +294,7 @@ export default function LeakageRadar({
           Leakage Radar Scanning Active Journal
         </h3>
         <p className="text-xs text-[#888888] max-w-md mx-auto leading-relaxed">
-          {fetchError || 'No recurring payments were detected in the selected dataset. Multi-month history is recommended to confirm cadence; rent and loan instalments are reported as obligations, not leakage.'}
+          {fetchError || 'No recurring-payment candidates were detected in the selected dataset. Multi-month history is recommended to confirm cadence; rent and loan instalments are reported as obligations, not leakage.'}
         </p>
       </Card>
     );
@@ -289,10 +320,29 @@ export default function LeakageRadar({
             <span className="border border-[#303030] bg-black text-[#888888] text-[8px] font-mono uppercase px-1.5 py-0.5 tracking-wider">
               {reportingPeriod || 'PERIOD NOT AVAILABLE'}
             </span>
-            <span className="text-[10px] font-mono uppercase text-[#AAAAAA] tracking-widest flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
-              {items.length} RECURRING PAYMENTS FOUND
-            </span>
+            {currentMode === 'LIVE' ? (
+              <>
+                <span className="border border-emerald-500/40 bg-emerald-950/20 text-emerald-300 text-[8px] font-mono uppercase px-1.5 py-0.5 tracking-wider">
+                  {confirmedCount} CONFIRMED RECURRING COMMITMENT{confirmedCount === 1 ? '' : 'S'}
+                </span>
+                <span className="border border-amber-500/40 bg-amber-950/20 text-amber-300 text-[8px] font-mono uppercase px-1.5 py-0.5 tracking-wider">
+                  {probableCount} PROBABLE RECURRING-PAYMENT CANDIDATE{probableCount === 1 ? '' : 'S'}
+                </span>
+                <span className="border border-[#303030] bg-black text-[#AAAAAA] text-[8px] font-mono uppercase px-1.5 py-0.5 tracking-wider">
+                  {observedDebitCount} OBSERVED DEBIT{observedDebitCount === 1 ? '' : 'S'}
+                </span>
+                {weakCount > 0 && (
+                  <span className="border border-[#404040] bg-black text-[#888888] text-[8px] font-mono uppercase px-1.5 py-0.5 tracking-wider">
+                    {weakCount} NEED{weakCount === 1 ? 'S' : ''} VERIFICATION
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-[10px] font-mono uppercase text-[#AAAAAA] tracking-widest flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                {items.length} SCENARIO REFERENCE ITEM{items.length === 1 ? '' : 'S'} · UNVERIFIED
+              </span>
+            )}
             {hasLive && currentMode === 'LIVE' && (
               <span className="border border-emerald-500/40 bg-emerald-950/20 text-emerald-400 text-[8px] font-mono uppercase px-1.5 py-0.2 tracking-widest">
                 {includePersona ? 'PERSONA SCENARIO EVIDENCE' : 'IMPORTED STATEMENT EVIDENCE'}
@@ -401,7 +451,7 @@ export default function LeakageRadar({
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 pt-1">
                     {getPaymentTypeBadge(sub.status, sub.is_essential)}
-                    {getConfidenceBadge(sub.confidence)}
+                    {getConfidenceBadge(sub.confidence, sub.occurrence_count)}
                     {sub.review_status && (
                       <span className="border border-[#303030] bg-[#0E0E0E] text-[#AAAAAA] text-[8px] font-mono uppercase px-1.5 py-0.5 tracking-wider">
                         {sub.review_status}
@@ -441,8 +491,8 @@ export default function LeakageRadar({
                         / Month
                       </span>
                       {sub.annual_cost !== null && (
-                        <span className="text-[8px] font-mono text-[#8A8A8A] block">
-                          ₹{sub.annual_cost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / yr
+                        <span className="text-[8px] font-mono text-[#8A8A8A] block" title="Projected annual cost based on assumed frequency">
+                          ≈ ₹{sub.annual_cost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / yr (projected)
                         </span>
                       )}
                     </>
@@ -473,8 +523,8 @@ export default function LeakageRadar({
                       <span>Est. Next:</span>
                       <strong className="text-white">{sub.next_date}</strong>
                       {sub.is_past_projection && (
-                        <span className="border border-amber-600/40 bg-amber-950/40 text-amber-400 text-[7px] uppercase px-1 py-0.2 font-bold">
-                          {sub.projection_status === 'STALE_HISTORY' ? 'STALE STATEMENT' : 'OVERDUE'}
+                        <span className="border border-zinc-600 bg-zinc-900 text-zinc-300 text-[7px] uppercase px-1.5 py-0.5 font-bold">
+                          {sub.projection_status === 'STALE_HISTORY' ? 'STALE STATEMENT' : 'CYCLE ELAPSED (NEXT STATEMENT PENDING)'}
                         </span>
                       )}
                     </span>
@@ -491,7 +541,11 @@ export default function LeakageRadar({
                 <span className={`text-[9px] font-mono uppercase tracking-wider block font-bold ${
                   sub.is_essential ? 'text-blue-300' : 'text-[#AAAAAA]'
                 }`}>
-                  {sub.is_essential ? 'Preservation Protocol' : 'Prune Protocol'}
+                  {sub.is_essential
+                    ? 'Preservation Protocol'
+                    : sub.confidence === 'CONFIRMED'
+                      ? 'Prune Protocol'
+                      : 'Review Protocol'}
                 </span>
                 <p className="text-xs font-mono text-[#AAAAAA] m-0">
                   {sub.recommendation}
@@ -554,10 +608,17 @@ export default function LeakageRadar({
             <div>
               <strong className="text-white uppercase font-bold">Review Protocol: </strong>
               <strong className="text-amber-300">₹{Math.round(avoidableMonthly).toLocaleString('en-IN')}/mo</strong>{' '}
-              is the value of confirmed recurring payments flagged for review. Usage is not visible
+              is the value of confirmed recurring commitments flagged for review. Usage is not visible
               in the statement, so no amount is a verified saving until you confirm the charge is
               unwanted and actually stop it.
             </div>
+            {probableMonthly > 0 && (
+              <div className="text-[10px] text-amber-300/90">
+                {probableCount} probable recurring-payment candidate{probableCount === 1 ? '' : 's'} worth
+                ₹{Math.round(probableMonthly).toLocaleString('en-IN')}/mo are still unconfirmed and are
+                not counted as commitments or savings.
+              </div>
+            )}
             {essentialMonthly > 0 && (
               <div className="text-[10px] text-[#777777]">
                 Obligations (₹{Math.round(essentialMonthly).toLocaleString('en-IN')}/mo for rent, loan EMIs, utilities, insurance) are excluded from review amounts.
@@ -574,7 +635,7 @@ export default function LeakageRadar({
               </div>
             )}
             <div className="text-[9px] text-[#777777] uppercase tracking-wider">
-              {sourceLabel} · {reportingPeriod || 'PERIOD NOT AVAILABLE'} · CONFIDENCE: OBSERVED EVIDENCE / SCENARIO UNVERIFIED
+              {sourceLabel} · {reportingPeriod || 'PERIOD NOT AVAILABLE'} · CONFIDENCE: OBSERVED DEBITS / CONFIRMED COMMITMENTS / PROBABLE CANDIDATES / SCENARIO UNVERIFIED
             </div>
           </div>
         </div>

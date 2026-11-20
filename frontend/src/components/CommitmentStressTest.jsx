@@ -44,6 +44,7 @@ export default function CommitmentStressTest({
   discretionaryBuffer = 14000,
   currentBalance = null,
   includePersona = false,
+  hasConsented = true,
   onNavigateToLedger,
 }) {
   // --- Form State ---
@@ -77,7 +78,12 @@ export default function CommitmentStressTest({
 
   // --- Fetch Stress Test Results ---
   const fetchStressTest = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId || !hasConsented) {
+      setTestResult(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -121,6 +127,7 @@ export default function CommitmentStressTest({
     discretionaryReductionPct,
     currentBalance,
     includePersona,
+    hasConsented,
   ]);
 
   // Initial and reactive calculation
@@ -175,6 +182,20 @@ export default function CommitmentStressTest({
   const baseline = testResult?.baseline || {};
   const flip = testResult?.judgment_flip || {};
   const alternatives = testResult?.what_would_make_this_safe || [];
+
+  if (!hasConsented) {
+    return (
+      <Card corners={10} marker className="p-6 font-mono">
+        <div className="flex items-center gap-3 text-xs text-[#AAAAAA]">
+          <ShieldAlert className="w-4 h-4 text-white" />
+          <span>
+            Consent is not active. The Commitment Stress Test reads session financial data and is
+            disabled until consent is re-authorised.
+          </span>
+        </div>
+      </Card>
+    );
+  }
 
   // Determine badge styling
   const getVerdictStyle = (v) => {
@@ -362,9 +383,9 @@ export default function CommitmentStressTest({
         <div className="border border-white/40 bg-[#050505] p-5 space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-white" />
-                <span className="text-xs font-bold uppercase tracking-widest text-white">
+              <div className="flex items-start gap-2 min-w-0">
+                <Clock className="w-4 h-4 text-white shrink-0 mt-0.5" />
+                <span className="text-xs font-bold uppercase tracking-widest text-white break-words min-w-0">
                   Judgment Flip Delay Controller: <span className="underline">{delayDays} Days</span>
                 </span>
               </div>
@@ -445,6 +466,33 @@ export default function CommitmentStressTest({
           </button>
         </div>
 
+        {/* Dataset provenance + honest missing-input explanation. Imported
+            statements have no verified liquid balance, so the engine reports
+            INSUFFICIENT DATA instead of borrowing a persona snapshot. */}
+        <div className="flex flex-wrap items-center gap-2 text-[9px] font-mono uppercase tracking-wider text-[#888888]">
+          <span className="border border-[#303030] bg-black px-1.5 py-0.5 text-[#AAAAAA]">
+            DATASET: {testResult?.dataset_source || (includePersona ? 'PERSONA_SCENARIO' : 'IMPORTED_STATEMENT')}
+          </span>
+          {verdict === 'INSUFFICIENT DATA' && (
+            <span className="border border-amber-500/40 bg-amber-950/20 px-1.5 py-0.5 text-amber-300">
+              NOT ENOUGH VERIFIED INPUTS FOR A VERDICT
+            </span>
+          )}
+        </div>
+
+        {verdict === 'INSUFFICIENT DATA' && (testResult?.insufficient_reasons?.length || 0) > 0 && (
+          <div className="border border-amber-500/30 bg-amber-950/10 p-3 space-y-1">
+            <div className="text-[9px] uppercase tracking-wider text-amber-300 font-bold">
+              Data coverage limitations
+            </div>
+            <ul className="list-disc pl-4 space-y-1 text-[10px] text-[#BBBBBB] m-0">
+              {testResult.insufficient_reasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* 10 Required Metric Indicators */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
           <div className="border border-[#202020] bg-[#0A0A0A] p-3 space-y-1">
@@ -478,6 +526,11 @@ export default function CommitmentStressTest({
             <span className="text-sm font-bold text-white block">
               ₹{Number(baseline.existing_fixed_obligations || 0).toLocaleString('en-IN')}/mo
             </span>
+            {Number(baseline.probable_subscriptions_under_review || 0) > 0 && (
+              <span className="text-[9px] text-[#888888] block">
+                + ₹{Number(baseline.probable_subscriptions_under_review).toLocaleString('en-IN')} review subs
+              </span>
+            )}
           </div>
 
           <div className="border border-[#202020] bg-[#0A0A0A] p-3 space-y-1">
@@ -825,11 +878,14 @@ export default function CommitmentStressTest({
             {/* Existing Obligations Evidence */}
             <div className="border border-[#202020] bg-[#0A0A0A] p-4 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase text-[#AAAAAA] font-bold">2. Fixed Commitments & Subscriptions</span>
-                <span className="text-xs font-bold text-white">₹{Number(baseline.existing_fixed_obligations || 0).toLocaleString('en-IN')}/mo</span>
+                <span className="text-[10px] uppercase text-[#AAAAAA] font-bold">2. Contractual Obligations & Subscriptions</span>
+                <span className="text-xs font-bold text-white">
+                  ₹{Number(baseline.total_recurring_outflow || baseline.existing_fixed_obligations || 0).toLocaleString('en-IN')}/mo
+                </span>
               </div>
               <p className="text-[10px] text-[#888888] m-0">
-                Derived from verified recurring debits for rent, loans, and subscriptions.
+                Fixed contractual commitments (rent, loans): ₹{Number(baseline.existing_fixed_obligations || 0).toLocaleString('en-IN')}/mo.
+                {Number(baseline.probable_subscriptions_under_review || 0) > 0 ? ` Software & subscription review candidates: ₹${Number(baseline.probable_subscriptions_under_review).toLocaleString('en-IN')}/mo.` : ''}
               </p>
             </div>
           </div>

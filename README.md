@@ -194,7 +194,7 @@ The UI is then available at `http://localhost:5173/`.
 ### 4.3 Tests and production build
 
 ```bash
-# Backend: the full automated suite (559 tests)
+# Backend: the full automated suite (612 tests)
 cd backend
 python manage.py test api advisor analytics sanitizer
 
@@ -210,7 +210,11 @@ node scripts/verify-ambient-background.mjs
 The backend suite is the authoritative verification: it covers authentication,
 session isolation, consent enforcement, PII masking, refund matching, transfer
 detection, recurring classification, the XIRR borrowing-cost maths and the
-persistence of every figure shown on the dashboard.
+persistence of every figure shown on the dashboard. It also asserts that imported
+statements and synthetic personas are never mixed: dataset selection is strict,
+unverified balances produce `INSUFFICIENT DATA` rather than a reassuring grade,
+and a single observed debit is reported as a probable recurring-payment candidate
+instead of a confirmed subscription.
 
 `scripts/verify-ambient-background.mjs` rasterises the background's motion
 model with the same maths the canvas uses and checks that the texture is

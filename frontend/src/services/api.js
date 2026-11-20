@@ -360,14 +360,15 @@ export const api = {
   },
 
   // Phase 2 Financial Intelligence: 2. Monthly Budget Analyzer
-  getMonthlyBudget: async (sessionId = null, year = 2026, month = 10, includePersona = false) => {
+  getMonthlyBudget: async (sessionId = null, year = null, month = null, includePersona = false) => {
     const sid = await resolveActiveSession(sessionId);
-    const res = await apiClient.post('/insights/monthly-budget/', {
+    const payload = {
       session_id: sid,
-      year,
-      month,
       include_persona: includePersona,
-    });
+    };
+    if (year !== null && year !== undefined) payload.year = year;
+    if (month !== null && month !== undefined) payload.month = month;
+    const res = await apiClient.post('/insights/monthly-budget/', payload);
     return res.data;
   },
 
@@ -449,6 +450,12 @@ export const api = {
       transaction_id: transactionId,
       ...correctionParams,
     });
+    return res.data;
+  },
+
+  // DPDP Privacy & Consent Audit Trail (Session-scoped, read-only)
+  getPrivacyAuditTrail: async () => {
+    const res = await apiClient.get('/privacy/audit-trail/');
     return res.data;
   },
 
