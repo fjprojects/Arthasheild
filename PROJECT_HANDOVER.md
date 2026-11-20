@@ -294,7 +294,7 @@ Implemented in [`backend/advisor/services.py`](file:///C:/Users/francis/.gemini/
 
 - **Mode A: Live Gemini API (`LIVE_GEMINI`)**:
   - Activated when `GEMINI_API_KEY` is present in the environment.
-  - Model: `gemini-2.0-flash`.
+  - Model: `gemini-3.8-flash`.
   - Sent payload: **Sanitized financial summary metrics and anonymized text ONLY**. Zero PII or bank credentials.
 - **Mode B: Offline Deterministic Fallback (`OFFLINE_RULE_BASED`)**:
   - Automatically activated if `GEMINI_API_KEY` is empty, unset, invalid, or encounters rate limits / network timeouts.
