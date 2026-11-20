@@ -648,7 +648,7 @@ class SanitizePreviewView(APIView):
                 "total_redactions_count": result["total_redactions_count"]
                 + sum(breakdown.values()),
                 "sanitized_length": len(preview),
-                "privacy_status": "PII_STRIPPED_LOCAL_BOUNDARY_ENFORCED",
+                "privacy_status": "PII_STRIPPED_SERVER_BOUNDARY_ENFORCED",
             }
         )
 
