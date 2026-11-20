@@ -1,22 +1,24 @@
-# ArthaShield (FinGuard AI) — Master Project Handover
+# ArthaShield (FinGuard AI) — Archived Project Handover Snapshot
 
 **Handover Timestamp:** 2026-11-10T12:00:00+05:30  
 **Project Path:** `C:\Users\francis\.gemini\antigravity\scratch\arthashield`  
-**Current Test Status:** `280/280 PASSING` (Django Test Runner) | `Vite Build: CLEAN (1.26s)`  
-**Target Event:** Arthaton 2026 Hackathon (Privacy-First Financial Engineering Track)  
+**Current Test Status:** `690 backend tests passing in the latest GitHub Actions run on 2026-11-20` (Django Test Runner) | `Vite Build: CLEAN (1.26s)`  
+**Target Event:** Arthaton 2026 Hackathon  
+**Current reference:** [README.md](README.md)  
+**Current implementation note (2026-11-20):** This file is retained as project history, not as the authoritative product/security specification. It contains earlier build notes that have since changed. Use the root README and current CI results for the current architecture, model, privacy boundaries, and test status.  
 
 ---
 
 ## 1. Project Overview and Objectives
 
-ArthaShield is a privacy-first, zero-knowledge financial intelligence companion designed for everyday citizens facing financial information asymmetry, hidden fee leakage, and predatory debt mechanics.
+ArthaShield is a privacy-first financial intelligence companion designed for everyday citizens facing financial information asymmetry, hidden fee leakage, and predatory debt mechanics. The backend processes uploaded statements; this is not a zero-knowledge or client-only processing system.
 
 ### Primary Objectives:
 1. **Eliminate Silent Cashflow Drains:** Detect recurring subscriptions, dormant micro-debits, bill creep, and unlinked auto-debits without requiring bank credentials or SMS scraping.
 2. **Deterministic-Math Integrity:** Compute emergency runway, debt-to-income (DTI), safe-to-spend allowances, and effective APR strictly in deterministic Python. Zero hallucinated numbers.
-3. **Zero-Knowledge PII Pipeline:** Redact account numbers, personal names, phone numbers, UPI identifiers, PAN, and Aadhaar before any payload reaches an LLM.
+3. **Server-Side PII Boundary:** Tokenize recognizable account numbers, personal names, phone numbers, UPI identifiers, PAN, and Aadhaar before provider-bound AI payloads. Detection is defense in depth, not a guarantee that every free-text name is found.
 4. **Transparent Decision Simulators:** Demystify disguised 0% "No-Cost" EMI schemes, revealing hidden processing fees, GST on interest subvention, and true annual percentage rates.
-5. **DPDP & GDPR Compliance:** Ephemeral storage, consent auditing, and a single-click "Hard Purge" (Data Shredder) that permanently purges session records.
+5. **Consent and Deletion Controls:** Session-scoped storage, consent auditing, and a single-click hard purge for records held by the application. This is not a claim of certified DPDP or GDPR compliance.
 
 ---
 
@@ -24,13 +26,13 @@ ArthaShield is a privacy-first, zero-knowledge financial intelligence companion 
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                   Browser Client: React 18 + TailwindCSS                │
+│                   Browser Client: React 19 + TailwindCSS                │
 │       Vite 8.3 | Lucide Icons | CRT & Corner Brackets Visual Theme     │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ HTTPS + Bearer Session Token
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│               Backend: Django 5.x + Django REST Framework              │
+│               Backend: Django 6.0 + Django REST Framework              │
 ├───────────────────────────────┬────────────────────────────────────────┤
 │ Sanitizer Engine              │ Deterministic Analytics Engine         │
 │ (Regex + Tokenizer)           │ (Decimal math, ROUND_HALF_UP)          │
@@ -44,15 +46,15 @@ ArthaShield is a privacy-first, zero-knowledge financial intelligence companion 
                                     │ Scrubbed Tokens Only (No PII)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│            Semantic LLM Layer: Google Gemini 2.0 Flash                 │
+│            Optional Advisor Layer: Google Gemini 3.8 Flash                 │
 │      Strict offline rule-based fallback when API key is unavailable    │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Backend:** Python 3.12, Django 5.x, Django REST Framework, `pdfplumber`, `cryptography`.
-- **Frontend:** React 18, Vite 8, Tailwind CSS, Lucide React, Canvas Confetti.
+- **Backend:** Python 3.12, Django 6.0, Django REST Framework, and `pdfplumber`.
+- **Frontend:** React 19, Vite 8, Tailwind CSS, and Lucide React.
 - **Data Stores:** SQLite (`backend/db.sqlite3`) for local development; PostgreSQL-ready via `DATABASE_URL` (`backend/core/settings.py`).
-- **AI/LLM Provider:** Google Gemini API (`gemini-2.0-flash`) via `google.generativeai` with automated local deterministic rule-based fallback.
+- **AI/LLM Provider:** Optional Google Gemini Developer API (`gemini-3.8-flash`) over HTTPS, with deterministic rule-based fallback.
 
 ---
 
@@ -61,8 +63,8 @@ ArthaShield is a privacy-first, zero-knowledge financial intelligence companion 
 | Feature | Description | Status |
 |---|---|---|
 | **Session Initiation & Token Auth** | Cryptographic bearer tokens, SHA-256 session identification, zero credential persistence. | `VERIFIED` |
-| **Interactive Consent Modal** | DPDP Act 2023 compliant consent audit logging with revocation and status checks. | `VERIFIED` |
-| **Document PII Sanitizer** | Dual-tier scrubbing (client-side preview + server-side enforcement) masking PAN, Aadhaar, account numbers, names. | `VERIFIED` |
+| **Interactive Consent Modal** | Consent capture, audit logging, revocation and server-side status checks; not a legal compliance certification. | `VERIFIED` |
+| **Document PII Sanitizer** | Server-side preview and provider-boundary redaction for recognizable PAN, Aadhaar, account and contact patterns; free-text name detection remains heuristic. | `VERIFIED` |
 | **Statement Parser (PDF/CSV/TXT)** | Multi-format bank statement parsing, transaction normalization, and fingerprint deduplication. | `VERIFIED` |
 | **Safe-to-Spend & Health Score** | Deterministic liquidity runway, debt service ratio, and uncommitted discretionary cash. | `VERIFIED` |
 | **"No-Cost" EMI Simulator** | Unmasks hidden processing fees, GST on subvention, the effective annual borrowing cost from dated cash flows (XIRR), and runway impact. | `VERIFIED` |
