@@ -103,6 +103,18 @@ class AdvisorOutputValidationTests(TestCase):
         self.assertNotIn("GEMINI_API_KEY", serialized)
         self.assertNotIn("x-goog-api-key", serialized)
 
+    def test_08_monetary_claim_scanner_ignores_transaction_identifier_digits(self):
+        payload = {
+            "explanation": "The EMI option leaves less room for unexpected costs.",
+            "evidence_transaction_ids": ["12345678901234567890123456789012"],
+        }
+        metrics = {"proposed_amount": 40000.0}
+
+        self.assertEqual(
+            AdvisorService._unverified_amount_claims(payload, metrics),
+            [],
+        )
+
 
 class AdvisorOfflineFallbackTests(TestCase):
     """
