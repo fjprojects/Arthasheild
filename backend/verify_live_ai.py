@@ -11,7 +11,7 @@ Usage (from the ``backend`` directory):
     export GEMINI_API_KEY=<your key>       # Linux / macOS
     python verify_live_ai.py
 
-    python verify_live_ai.py --model gemini-3.6-flash
+    python verify_live_ai.py --model gemini-3.8-flash
 
 The key is read from the environment only. It is never printed, never written
 to a file and never logged: the report below shows only whether a key was
