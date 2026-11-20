@@ -57,17 +57,22 @@ class AdvisorOutputValidationTests(TestCase):
             self.assertEqual(result["source"], "OFFLINE_RULE_BASED", msg=json.dumps(payload)[:80])
             self.assertFalse(result["is_ai_generated"])
 
-    def test_03_amounts_outside_the_deterministic_metrics_are_flagged(self):
+    def test_03_amounts_outside_the_deterministic_metrics_force_offline_fallback(self):
         result = self._live_call(self.VALID_PAYLOAD)
-        # ₹1,500 is a deterministic metric value, so it is verified.
+        # ₹1,500 is a deterministic monetary metric, so it is verified.
+        self.assertEqual(result["source"], "LIVE_GEMINI")
         self.assertTrue(result["numeric_claims_verified"])
         self.assertEqual(result["unverified_amount_claims"], [])
 
         invented = json.loads(json.dumps(self.VALID_PAYLOAD))
         invented["top_actionable_wins"][0]["impact_amount"] = "Save ₹9,999/mo"
         result = self._live_call(invented)
-        self.assertFalse(result["numeric_claims_verified"])
-        self.assertIn("₹9,999", result["unverified_amount_claims"])
+        # Unsupported rupee claims are rejected before the text reaches the UI.
+        self.assertEqual(result["source"], "OFFLINE_RULE_BASED")
+        self.assertFalse(result["is_ai_generated"])
+        self.assertTrue(result["numeric_claims_verified"])
+        self.assertEqual(result["unverified_amount_claims"], [])
+        self.assertNotIn("9,999", json.dumps(result))
 
     def test_04_offline_fallback_quotes_no_invented_amounts(self):
         metrics = {
