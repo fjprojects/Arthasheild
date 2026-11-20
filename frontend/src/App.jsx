@@ -640,8 +640,8 @@ export default function App() {
                   <span>
                     SESSION REF: <CrypticText text={sessionId ? `${sessionId.slice(0, 16)}...` : 'DISCONNECTED'} duration={300} triggerKey={sessionId} />
                   </span>
-                  <span className="hidden sm:inline">DATA COVENANT: CLIENT-FIRST DPDP 2026</span>
-                  <span>ENCRYPTION: AES-256 / SHA-256 IDENTIFIER</span>
+                  <span className="hidden sm:inline">DATA CONTROL: CONSENT + SESSION ISOLATION</span>
+                  <span>SESSION TOKEN: SHA-256 HASHED</span>
                 </div>
               </Card>
             )}
@@ -708,7 +708,7 @@ export default function App() {
                     SESSION REF: <CrypticText text={sessionId ? `${sessionId.slice(0, 16)}...` : 'DISCONNECTED'} duration={300} triggerKey={sessionId} />
                   </span>
                   <span className="hidden sm:inline">IDENTITY: NOT INFERRED · DATASET: OBSERVED</span>
-                  <span>DATA COVENANT: CLIENT-FIRST DPDP 2026</span>
+                  <span>DATA CONTROL: CONSENT + SESSION ISOLATION</span>
                 </div>
               </Card>
             )}
@@ -1040,7 +1040,7 @@ export default function App() {
               <div className="flex items-center gap-4 text-[#8A8A8A]">
                 <span>Zero Credentials</span>
                 <span>◈</span>
-                <span>Local PII Redaction</span>
+                <span>Server-Side PII Redaction</span>
                 <span>◈</span>
                 <span>Deterministic Math</span>
               </div>
