@@ -303,7 +303,8 @@ class AdvisorPrivacyBoundaryTests(AdvisorTestBase):
         system_content = body["systemInstruction"]["parts"][0]["text"]
         self.assertIn("[USER_PRIMARY]", user_content)
         self.assertIn("INPUT INTEGRITY", system_content)
-        self.assertNotIn("[USER_PRIMARY]", system_content)
+        self.assertNotIn("Rajesh Kumar Verma", system_content)
+        self.assertNotIn("998877665544", system_content)
 
     def test_03_the_key_never_appears_in_the_response(self):
         with patch.object(AdvisorService, "get_api_key", return_value="synthetic_test_key"):
