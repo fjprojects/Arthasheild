@@ -1,8 +1,7 @@
 # ArthaShield backend dependencies.
 #
-# The versions below are the ones the test suite was verified against
-# (Python 3.12). They are pinned so a fresh install reproduces the same
-# environment that the 440-test suite passes in.
+# The versions below are pinned and verified by the GitHub Actions backend
+# test suite on Python 3.12. Keep this file in sync with quality.yml.
 Django==6.0.3
 djangorestframework==3.16.1
 django-cors-headers==4.9.0
