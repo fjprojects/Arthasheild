@@ -204,7 +204,7 @@ class AdvisorTransportContractTests(AdvisorTestBase):
 
     def test_07_request_configuration_is_derived_from_the_pinned_model(self):
         """thinkingLevel errors on older models; temperature is ignored on new ones."""
-        modern = AdvisorService._generation_config("gemini-3.6-flash")
+        modern = AdvisorService._generation_config("gemini-3.8-flash")
         self.assertEqual(modern["thinkingConfig"], {"thinkingLevel": "LOW"})
         self.assertNotIn("temperature", modern)
         self.assertEqual(modern["responseMimeType"], "application/json")
@@ -214,11 +214,11 @@ class AdvisorTransportContractTests(AdvisorTestBase):
         self.assertEqual(legacy["temperature"], 0.2)
 
         self.assertFalse(AdvisorService._supports_thinking_level("gemini-2.5-flash"))
-        self.assertTrue(AdvisorService._supports_thinking_level("gemini-3.6-flash"))
+        self.assertTrue(AdvisorService._supports_thinking_level("gemini-3.8-flash"))
 
     def test_08_the_configured_model_is_currently_supported(self):
-        """gemini-2.5-flash is deprecated and is shut down on 2026-12-01."""
-        self.assertEqual(AdvisorService.DEFAULT_MODEL, "gemini-3.6-flash")
+        """Keep the default on the current stable Gemini Flash generation."""
+        self.assertEqual(AdvisorService.DEFAULT_MODEL, "gemini-3.8-flash")
         self.assertNotIn("2.5-flash", AdvisorService.DEFAULT_MODEL)
         self.assertNotIn("2.0-flash", AdvisorService.DEFAULT_MODEL)
 

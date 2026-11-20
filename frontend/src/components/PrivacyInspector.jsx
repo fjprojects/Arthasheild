@@ -179,7 +179,7 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
               </h3>
             </div>
             <p className="text-[11px] font-mono text-[#AAAAAA] mt-1 m-0">
-              Real-time verification of local PII scrubbing before any token departs to external inference engines.
+              Preview server-side identifier redaction and inspect the sanitized text before optional external AI analysis.
             </p>
           </div>
 

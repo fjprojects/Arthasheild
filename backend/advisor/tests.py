@@ -92,8 +92,8 @@ class AdvisorOutputValidationTests(TestCase):
         self.assertNotIn("/100", result["plain_english_summary"])
         self.assertIn("No deterministic financial metrics", result["plain_english_summary"])
 
-    def test_06_model_is_configurable_and_defaults_to_a_supported_flash_model(self):
-        self.assertNotIn("2.0-flash", AdvisorService.get_model())
+    def test_06_model_is_configurable_and_defaults_to_the_current_flash_model(self):
+        self.assertEqual(AdvisorService.get_model(), "gemini-3.8-flash")
         with patch.dict("os.environ", {"GEMINI_MODEL": "synthetic-model-1"}):
             self.assertEqual(AdvisorService.get_model(), "synthetic-model-1")
 

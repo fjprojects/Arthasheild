@@ -329,9 +329,9 @@ input is missing instead of inventing a number.
 ## 7. The AI layer, precisely
 
 * **Model:** configured through `GEMINI_MODEL`; the repository's example
-  configuration defaults to `gemini-3.6-flash`. The model must support structured
-  JSON output. The previous default, `gemini-2.5-flash`, is deprecated and is
-  scheduled to shut down by the provider on 1 December 2026, so it must not be pinned.
+  configuration defaults to Google's current stable Flash model,
+  `gemini-3.8-flash`, which supports the structured JSON response path used here.
+  The model can be changed without a code change through the environment variable.
 * **Key:** read from `GEMINI_API_KEY` at request time. It is never stored,
   logged or returned.
 * **Input:** sanitized text plus the deterministic metrics. Nothing else.

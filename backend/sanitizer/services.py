@@ -188,7 +188,7 @@ class SanitizerService:
                 "sanitized_text": "",
                 "redactions": [],
                 "total_redactions_count": 0,
-                "privacy_compliance_status": "SECURE_LOCAL_ONLY"
+                "privacy_compliance_status": "SERVER_SIDE_REDACTION_APPLIED"
             }
 
         sanitized_text = raw_text
@@ -287,7 +287,7 @@ class SanitizerService:
             "sanitized_text": sanitized_text,
             "redactions": redactions_performed,
             "total_redactions_count": total_pii_elements,
-            "privacy_compliance_status": "SECURE_LOCAL_ONLY"
+            "privacy_compliance_status": "SERVER_SIDE_REDACTION_APPLIED"
         }
 
     @classmethod
