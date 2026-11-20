@@ -42,7 +42,8 @@ ArthaShield takes a different route: the user's statement is uploaded to the Art
 | **"What-If" EMI reality check** | Simulates a purchase with fees and GST and reports the **effective annual borrowing cost (XIRR)** from the real cash flows. | Deterministic |
 | **Evidence-Linked Decision Support** | "Show Me The Evidence" connects every verdict directly to verified session ledger transactions; supports human correction of misclassified records. | Deterministic Ledger |
 | **Privacy Inspector** | Live split view: what was masked, how many tokens, and what the sanitized stream looks like before it is used. | Deterministic |
-| **Optional AI commentary** | A language model may explain the *sanitized* stream. It never computes a number and its answer is schema-validated before it is shown. | Model (advisory only) |
+| **Optional AI statement commentary** | Gemini may explain the *sanitized* transaction stream alongside pre-computed metrics. It never calculates or changes financial figures. | Model (advisory only) |
+| **Optional AI commitment explanation** | Gemini may explain the deterministic Buy Now / EMI / Wait decision packet. Returned transaction references are checked against the active session ledger; the model cannot change the Python verdict. | Model (advisory only) |
 | **Ambient atmosphere** | A continuously morphing organic sand texture behind every screen, drawn on two lightweight canvases. It carries no data and never intercepts a click. | Visual only |
 
 ---
@@ -337,20 +338,19 @@ input is missing instead of inventing a number.
 * **Output:** schema-validated before it is shown. A malformed answer is
   discarded and the deterministic response is used instead. Reasoning ("thinking")
   parts are stripped, and a blocked or truncated answer is treated as a failure.
-* **Numbers:** the model never supplies a figure. Any amount it states that the
-  deterministic engine did not produce is listed in `unverified_amount_claims`
-  and flagged as advisory.
-* **Offline:** without a key (or on any failure — timeout, network error,
-  non-200 status, blocked prompt) the advisor returns a clearly labelled
-  deterministic response whose amounts come from the engine. The dashboard is
-  unaffected either way.
+* **Separation of responsibilities:** Python computes all financial figures and verdicts. Gemini provides optional explanations for sanitized statement analysis and the Commitment Stress Test; it never writes to or replaces the deterministic metrics.
+* **Instruction/data separation:** trusted model instructions use Gemini's dedicated system-instruction field. Statement text and the minimized stress-test decision packet are sent separately as untrusted user data.
+* **Privacy gate:** the advisor re-sanitizes provider-bound text and the stress-test decision packet, then checks for recognizable residual identifiers such as email addresses, UPI VPAs, phone numbers, account/card patterns, PAN, Aadhaar and common banking IDs. If a recognizable identifier remains, the provider request is skipped and the offline rules are used. This is defense in depth, not a guarantee of perfect free-text name detection.
+* **Output validation:** every field consumed by the UI is type-checked and length-bounded. Stress-test explanation arrays are validated, and returned evidence IDs are filtered against the active session.
+* **Numbers:** monetary claims that do not match a monetary value produced by the deterministic engine are rejected and the offline response is used. Percentages, counts, health scores and durations cannot authorize rupee amounts.
+* **Offline:** without a key (or on any failure — timeout, network error, non-200 status, blocked prompt, malformed output, residual PII or unsupported monetary claim) the advisor returns a clearly labelled deterministic response whose amounts come from the engine. The dashboard is unaffected either way.
 * **Transport:** the current stable API route (`v1`) is used, with `v1beta` as a
   fallback for accounts not yet served by it. Request configuration is derived
   from the pinned model, so a model that does not accept a field is never sent
   one.
-* **Defence in depth:** the advisor re-sanitizes its own outbound text, so a
-  personal name, account number, phone number or PAN cannot reach the provider
-  even if a future caller forgets to sanitize.
+* **Defence in depth:** the advisor repeats sanitization at the provider boundary and
+  checks recognizable residual identifiers before sending. This is a heuristic
+  safeguard, not a claim that every personal name in free text can be detected.
 
 If the live path is unavailable in your environment, the product is still fully
 functional: every financial figure on the dashboard is computed by Python.
