@@ -226,14 +226,26 @@ Respond in strict JSON with the following keys:
         return any(term in normalized for term in cls.MONETARY_KEY_TERMS)
 
     @classmethod
-    def _iter_text_values(cls, payload: Any):
-        """Yields every string inside the model answer."""
+    def _iter_text_values(cls, payload: Any, key_hint: str = ""):
+        """
+        Yield user-visible model text while excluding machine identifiers.
+
+        Transaction IDs can contain long digit runs (especially UUIDs). They
+        are evidence references, not monetary statements, so scanning them as
+        prose can randomly reject otherwise valid model explanations.
+        """
         if isinstance(payload, dict):
-            for value in payload.values():
-                yield from cls._iter_text_values(value)
+            for key, value in payload.items():
+                normalized_key = str(key).strip().lower()
+                if (
+                    normalized_key in {"id", "ids"}
+                    or normalized_key.endswith(("_id", "_ids"))
+                ):
+                    continue
+                yield from cls._iter_text_values(value, normalized_key)
         elif isinstance(payload, list):
             for value in payload:
-                yield from cls._iter_text_values(value)
+                yield from cls._iter_text_values(value, key_hint)
         elif isinstance(payload, str):
             yield payload
 
