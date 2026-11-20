@@ -76,7 +76,7 @@ export default function PrivacyAuditTrail({ sessionId }) {
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-white" />
             <span className="text-white font-mono font-bold text-xs uppercase tracking-widest">
-              DPDP Privacy &amp; Consent Audit Ledger
+              Privacy &amp; Consent Audit Trail
             </span>
           </div>
           <button
@@ -99,7 +99,7 @@ export default function PrivacyAuditTrail({ sessionId }) {
           <div className="border border-[#1E1E1E] bg-[#0A0A0A] p-2.5">
             <span className="block text-[#666666]">Consent Status</span>
             <span className={`block font-bold mt-1 ${auditData?.active_consent ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {auditData?.active_consent ? 'ACTIVE (DPDP VALIDATED)' : 'WITHDRAWN / ABSENT'}
+              {auditData?.active_consent ? 'ACTIVE (CONSENT RECORDED)' : 'WITHDRAWN / ABSENT'}
             </span>
           </div>
           <div className="border border-[#1E1E1E] bg-[#0A0A0A] p-2.5">
@@ -109,15 +109,15 @@ export default function PrivacyAuditTrail({ sessionId }) {
             </span>
           </div>
           <div className="border border-[#1E1E1E] bg-[#0A0A0A] p-2.5">
-            <span className="block text-[#666666]">Provenance Guarantee</span>
+            <span className="block text-[#666666]">Calculation Method</span>
             <span className="block text-cyan-400 font-bold mt-1">
-              Deterministic Local
+              Deterministic Python
             </span>
           </div>
         </div>
 
         <p className="text-[10px] font-mono text-[#777777] leading-relaxed border-t border-[#1A1A1A] pt-2 m-0">
-          Cryptographically authenticated, tamper-evident audit record for Indian Digital Personal Data Protection (DPDP) compliance. Every consent authorization, statement scrub, and withdrawal is irrevocably recorded with zero exposure of raw credentials.
+          Session-scoped activity view for consent status, statement processing and withdrawals. This application audit trail is not an immutable cryptographic ledger or a legal-compliance certification.
         </p>
       </div>
 
@@ -135,7 +135,7 @@ export default function PrivacyAuditTrail({ sessionId }) {
         {loading && (
           <div className="py-8 text-center text-xs font-mono text-[#777777]">
             <RefreshCw className="w-4 h-4 animate-spin mx-auto mb-2 text-white" />
-            Loading cryptographic audit log...
+            Loading session audit events...
           </div>
         )}
 
