@@ -652,3 +652,77 @@ class CommitmentStressTestIntegrationAndSecurityTests(TestCase):
 
         # Living expenses must drop by rent amount (18,000)
         self.assertEqual(living_before - living_after, self.rent_tx.amount)
+
+    # 23. Malformed structured AI output must use the deterministic fallback.
+    def test_23_malformed_stress_ai_schema_falls_back(self):
+        packet = {
+            "overall_verdict": "CONDITIONAL",
+            "item_name": "Studio Monitor",
+            "proposed_amount": 40000.0,
+            "baseline": {"baseline_runway_months": 4.0},
+            "scenario_b_emi": {
+                "effective_monthly_commitment": 7000.0,
+                "emergency_runway_months": 3.5,
+            },
+            "evidence_ledger": {"all_cited_tx_ids": [str(self.salary_tx.id)]},
+        }
+        malformed = {
+            "explanation": "This may tighten the monthly budget.",
+            "financial_constraints": "This must be a list, not a string.",
+            "evidence_transaction_ids": [str(self.salary_tx.id)],
+            "assumptions": ["Income remains stable."],
+            "scenario_suggestions": ["Delay the purchase."],
+        }
+        provider_data = {
+            "candidates": [{
+                "content": {"parts": [{"text": json.dumps(malformed)}]}
+            }]
+        }
+
+        with patch.object(AdvisorService, "get_api_key", return_value="synthetic_test_key"):
+            with patch.object(AdvisorService, "_call_provider", return_value=(provider_data, None)):
+                result = AdvisorService.explain_commitment_stress_test(
+                    packet, {str(self.salary_tx.id), str(self.rent_tx.id)}
+                )
+
+        self.assertEqual(result["engine_status"], "OFFLINE_FALLBACK")
+        self.assertFalse(result["is_ai_generated"])
+        self.assertIn("explanation", result)
+
+    # 24. Unsupported monetary claims in AI stress explanations are never surfaced.
+    def test_24_unverified_stress_ai_amount_falls_back(self):
+        packet = {
+            "overall_verdict": "CONDITIONAL",
+            "item_name": "Studio Monitor",
+            "proposed_amount": 40000.0,
+            "baseline": {"baseline_runway_months": 4.0},
+            "scenario_b_emi": {
+                "effective_monthly_commitment": 7000.0,
+                "emergency_runway_months": 3.5,
+                "remaining_safety_buffer": 18000.0,
+            },
+            "evidence_ledger": {"all_cited_tx_ids": [str(self.salary_tx.id)]},
+        }
+        unsupported = {
+            "explanation": "This purchase will cost you ₹999999 in hidden charges.",
+            "financial_constraints": ["Monthly outflow is tight."],
+            "evidence_transaction_ids": [str(self.salary_tx.id)],
+            "assumptions": ["Income remains stable."],
+            "scenario_suggestions": ["Delay the purchase."],
+        }
+        provider_data = {
+            "candidates": [{
+                "content": {"parts": [{"text": json.dumps(unsupported)}]}
+            }]
+        }
+
+        with patch.object(AdvisorService, "get_api_key", return_value="synthetic_test_key"):
+            with patch.object(AdvisorService, "_call_provider", return_value=(provider_data, None)):
+                result = AdvisorService.explain_commitment_stress_test(
+                    packet, {str(self.salary_tx.id), str(self.rent_tx.id)}
+                )
+
+        self.assertEqual(result["engine_status"], "OFFLINE_FALLBACK")
+        self.assertFalse(result["is_ai_generated"])
+        self.assertNotIn("999999", json.dumps(result))
+
