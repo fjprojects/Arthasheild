@@ -5,6 +5,10 @@
 
 [Watch the ArthaShield demo on YouTube](https://youtu.be/oXG0cLqUp08)
 
+## Live Application
+
+[Open ArthaShield](https://arthasheild.vercel.app/)
+
 [![Hackathon](https://img.shields.io/badge/Arthaton-2026-emerald.svg)](https://arthaton2026.dev)
 [![Architecture](https://img.shields.io/badge/Architecture-Tokenized%20PII%20%2B%20Deterministic%20Math-blue.svg)]()
 [![Stack](https://img.shields.io/badge/Stack-React%20%7C%20Django%20%7C%20Postgres-indigo.svg)]()
