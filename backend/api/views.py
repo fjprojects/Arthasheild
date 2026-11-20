@@ -1303,7 +1303,7 @@ class PrivacyAuditTrailView(APIView):
             "category": "SECURITY",
             "timestamp": auth_session.created_at.isoformat() if hasattr(auth_session, 'created_at') and auth_session.created_at else timezone.now().isoformat(),
             "status": "COMPLETED",
-            "description": "Cryptographically authenticated zero-knowledge local session established.",
+            "description": "Session authenticated with a server-issued bearer token; only its SHA-256 hash is stored.",
             "metadata": {
                 "session_id": session_id,
                 "token_prefix": (getattr(auth_session, 'token_hash', '') or '')[:8] + "...",
