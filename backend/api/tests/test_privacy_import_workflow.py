@@ -241,7 +241,7 @@ class PrivacyImportWorkflowTests(TestCase):
 
         preview_text = data.get("sanitized_text_preview", "")
         self.assertTrue(len(preview_text) > 0)
-        self.assertEqual(data.get("privacy_status"), "PII_STRIPPED_LOCAL_BOUNDARY_ENFORCED")
+        self.assertEqual(data.get("privacy_status"), "PII_STRIPPED_SERVER_BOUNDARY_ENFORCED")
         self.assertGreater(data.get("total_redactions_count", 0), 0)
 
         # Assert no raw sensitive tokens leak into the preview text or entire JSON
