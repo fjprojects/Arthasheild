@@ -62,10 +62,10 @@ class AdvisorService:
         "surplus", "saving", "cash", "outflow", "inflow", "debit", "credit",
         "refund", "emi", "price", "buffer", "allowance",
     )
-    NON_MONETARY_KEY_TERMS = (
-        "_pct", "percent", "_rate", "_ratio", "_count", "_month", "_day",
-        "_year", "_score", "_grade", "_confidence", "_tenure", "_duration",
-        "_threshold", "runway", "severity",
+    NON_MONETARY_KEY_SUFFIXES = (
+        "_pct", "_percent", "_rate", "_ratio", "_count", "_month", "_months",
+        "_day", "_days", "_year", "_years", "_score", "_grade", "_confidence",
+        "_tenure", "_duration", "_threshold", "_runway", "_severity",
     )
 
     # Defense-in-depth egress checks. These run after the normal sanitizer and
@@ -220,7 +220,7 @@ Respond in strict JSON with the following keys:
     @classmethod
     def _is_monetary_key(cls, key: str) -> bool:
         normalized = str(key or "").lower()
-        if any(term in normalized for term in cls.NON_MONETARY_KEY_TERMS):
+        if normalized.endswith(cls.NON_MONETARY_KEY_SUFFIXES):
             return False
         return any(term in normalized for term in cls.MONETARY_KEY_TERMS)
 
