@@ -9,6 +9,18 @@
 
 [Open ArthaShield](https://arthasheild.vercel.app/)
 
+## Evaluator quick start
+
+ArthaShield is a working financial decision-support prototype. The fastest way to review it is:
+
+1. **Open the live app** and review the consent screen. No bank login, password, OTP or UPI PIN is requested.
+2. **Explore with synthetic data.** Use a built-in synthetic persona or the Privacy Inspector's preloaded synthetic statement. Do not upload a real bank statement for this public demonstration.
+3. **Follow the financial workflow.** Review the imported-session overview, evidence-based classifications, Leakage Radar, Commitment Stress Test, EMI Reality Check and session audit trail.
+4. **Inspect the privacy boundary.** In Privacy Inspector, select **Preview Scrub** to compare the synthetic raw sample with the server-returned sanitized preview before optional AI analysis.
+
+**What to look for:** ArthaShield separates observed cash movement from verified income, treats recurrence as an evidence question, and calculates financial figures in Python. Optional Gemini commentary explains sanitized information; it does not calculate or replace the financial results.
+
+
 [![Hackathon](https://img.shields.io/badge/Arthaton-2026-emerald.svg)](https://arthaton2026.dev)
 [![Architecture](https://img.shields.io/badge/Architecture-Tokenized%20PII%20%2B%20Deterministic%20Math-blue.svg)]()
 [![Stack](https://img.shields.io/badge/Stack-React%20%7C%20Django%20%7C%20Python-indigo.svg)]()
@@ -22,7 +34,7 @@
 Three things make personal finance analysis hard:
 
 1. **Silent, recurring outflows.** Forgotten subscriptions, convenience fees on "0% No-Cost" EMIs and rent/EMI obligations drain an account quietly. The damage is in the *pattern*, not in any single transaction.
-2. **Documents written in legalese.** A statement or loan letter buries a 18% GST line, a processing fee and a reference number inside prose.
+2. **Documents written in legalese.** A statement or loan letter buries an 18% GST line, a processing fee and a reference number inside prose.
 3. **Aggregators that demand the keys to your money.** Most finance apps ask for net-banking credentials or scrape an SMS inbox, then retain what they read.
 
 ArthaShield takes a different route: the user's statement is uploaded to the ArthaShield Django backend for parsing; identifiers are **tokenized on the server before any optional external AI processing**, and every number on the dashboard is produced by **deterministic Python** — never by a language model.
@@ -48,50 +60,16 @@ ArthaShield takes a different route: the user's statement is uploaded to the Art
 
 ---
 
-## 2.1 The ambient background
+## 2.1 Interface design
 
-A dark, slowly morphing sand texture sits behind the entire application -
-the consent screen, the dashboard, every insight panel and the simulator.
-It is mounted once, at the application root, so it is never recreated when
-the view changes.
+The application uses a monochrome interface with a subtle animated background. The effect is decorative: it does not control data processing or financial calculations. It respects `prefers-reduced-motion` and pauses while the browser tab is hidden.
 
-It is built from two canvases and one simulation clock:
-
-* **Dunes** - a domain-warped fractal noise field sampled into a coarse grid
-  and scaled up by the browser. The warping folds the contours into large,
-  slowly drifting, swirling organic masses with deep shadowed voids between
-  them.
-* **Grains** - fine particles carried by a divergence-free curl flow. They
-  brighten inside the dense bands of the same noise field, so the grain always
-  lies inside the shapes it appears to form.
-
-The engineering properties that matter:
-
-* **Cheap** - the whole simulation costs about 1.3 ms per frame at 1280x720
-  and is capped at 30 fps; the dunes are refreshed a slice at a time so their
-  cost is spread across frames.
-* **Never restarts** - the simulation clock only advances while the loop runs,
-  so the texture evolves continuously rather than looping.
-* **Invisible to the user and to the tests** - `pointer-events: none`, no
-  React state, and no DOM above the content layer.
-* **Respects `prefers-reduced-motion`** - a single static frame is rendered
-  instead of an animation, and the frame still carries the full texture.
-* **Pauses when the tab is hidden** - the animation loop stops entirely and
-  resumes exactly where it paused.
-* **Readable** - the peak background luminance behind body text still yields
-  a 4.5:1 contrast ratio against the dimmest secondary text, and the content
-  panels are 90% opaque over it.
-
-The motion model lives in `frontend/src/components/effects/ambientSand.js`,
-separate from React, so it can be measured without a browser:
+The rendering and motion checks live in `frontend/src/components/effects/ambientSand.js` and can be run with:
 
 ```bash
 cd frontend
 node scripts/verify-ambient-background.mjs
 ```
-
----
-
 
 ---
 
@@ -144,7 +122,7 @@ Provides up to three actionable deterministic alternatives:
 
 ```
 [Browser: React + Vite + Tailwind]
-        │  X-Session-Token (bearer secret in sessionStorage)
+        │  X-Session-Token (bearer token cached in sessionStorage; backend also sets HttpOnly cookie)
         ▼  HTTPS / JSON
 [Django REST API]
    ├── PII sanitization engine        regex + tokenization
@@ -157,10 +135,10 @@ Provides up to three actionable deterministic alternatives:
    │                                  api/response_safety.py
    └── Optional advisor layer         receives ONLY sanitized text and
                                       pre-computed metrics; schema-validated
-[Database]  SQLite fallback; PostgreSQL when DATABASE_URL and a PostgreSQL driver are configured
+[Database]  SQLite fallback; PostgreSQL when DATABASE_URL and a compatible driver are configured
 ```
 
-**What is stored:** sanitized merchant labels, amounts, dates, directions and a per-session snapshot. Raw narration is not persisted. A session can be purged completely with one click.
+**What is stored:** imported transaction records use normalized merchant labels, financial fields and derived classifications, together with per-session snapshots. The transaction model has no raw-statement narration field; original input is handled in memory during parsing and sanitized before imported records are saved. A session can be purged with one action.
 
 ---
 
@@ -297,24 +275,29 @@ input is missing instead of inventing a number.
 
 * ArthaShield never asks for a bank login, password, UPI PIN or an OTP, and
   never stores one.
-* Identifiers are tokenized **on the server** before any payload leaves the
-  host; the sanitized stream is the only thing an external model ever receives.
+* Uploaded statements are processed by the Django backend. Before an optional
+  Gemini request, the advisor re-sanitizes the text and checks for recognizable
+  residual identifier patterns. Only the sanitized payload is sent to the model.
+  These protections are heuristic and cannot guarantee detection of every name
+  or identifier in arbitrary free text.
 * The model receives **no** raw narration and performs **no** arithmetic.
-* Every API response that can contain user content passes through one response
-  boundary (`api/response_safety.py`).
+* Statement and SMS ingestion responses use safe-serialization helpers in
+  `api/response_safety.py` so raw narration and transaction references are not
+  echoed back as ordinary client-facing fields.
 * Requests are bound to a session; a request that presents another session's id
   is refused with `403 SESSION_MISMATCH`.
 * Consent is enforced server-side for every persistent operation.
 * One click (`/api/v1/privacy/nuke-data/`) deletes the session's records.
-* Session tokens are secrets: they live in `sessionStorage`, are sent only in the
-  `X-Session-Token` header, and are rotated on demand.
+* The frontend caches the current bearer token in `sessionStorage` and sends it
+  in the `X-Session-Token` header. The backend also issues an HttpOnly session
+  cookie; only the token's SHA-256 hash is stored in the `SecureSession` row.
 
 **What is not claimed**
 
-* This is **not** a zero-knowledge system: the server sees the uploaded
-  statement while it parses it. The claim is narrower and accurate — *no
-  credential is ever requested, and no personal identifier is ever sent to an
-  external model*.
+* This is **not** a zero-knowledge or client-only system: the server receives
+  and parses the uploaded statement. The application never requests bank
+  credentials. Recognizable identifiers are redacted and checked before optional
+  provider calls, but heuristic detection is not perfect anonymization.
 * This is **not** a certified DPDP/GDPR compliance product. It implements
   data-minimising defaults and a deletion path; it is not legal advice and
   carries no regulatory certification.
@@ -408,7 +391,7 @@ application does not add a second redirect at the proxy hop.
 | Variable | Required | Notes |
 |---|---|---|
 | `DJANGO_SECRET_KEY` | yes | Generate a random value. |
-| `DATABASE_URL` | yes | The provided PostgreSQL instance. |
+| `DATABASE_URL` | optional | Set only when a PostgreSQL database has been provisioned and a compatible PostgreSQL driver is included. The supplied `render.yaml` creates the web service only; it does not create a database. |
 | `ALLOWED_HOSTS` | yes | Your Render hostname. |
 | `FRONTEND_URL` | recommended | Your Vercel URL (CORS). |
 | `GEMINI_API_KEY` | optional | Enables live analysis; omit it for the offline mode. |
@@ -453,6 +436,14 @@ and `DJANGO_SECRET_KEY` in production.
   confirm it on your own machine (§7.1).
 * **PDF parsing is best-effort.** Table-structured PDFs parse well;
   free-form layouts fall back to line parsing.
+* **Demo data:** use synthetic personas or synthetic statements for public review;
+  do not upload real confidential bank statements into the hosted demonstration.
+* **Render persistence:** the included `render.yaml` provisions a web service,
+  not a database or persistent disk. Unless a PostgreSQL URL and compatible
+  driver are configured separately, Django uses its SQLite fallback. On an
+  ephemeral service filesystem, stored session data may be lost after a restart.
+* **Regulatory boundary:** ArthaShield is educational decision support. It is not
+  certified financial advice, credit underwriting or a DPDP/GDPR certification.
 
 ---
 
@@ -512,13 +503,3 @@ The suite is the contract: it asserts the financial arithmetic, the privacy
 boundary and the session/consent rules rather than the shape of the UI.
 
 ---
-
-## 13. Engineering Limitations & Boundary Disclosures
-
-In accordance with responsible fintech engineering principles:
-
-1. **Storage Persistence:** When deployed on Render without a dedicated persistent PostgreSQL `DATABASE_URL`, the application falls back to local SQLite ephemeral storage. Data does not persist across container restarts. Do not claim durable long-term storage in that mode.
-2. **Synthetic Data Recommendation:** For demonstrations and testing, always use the provided synthetic personas (`synthetic_data/personas.json`) or synthetic CSV statements. Do not upload live confidential banking credentials or real statements into ephemeral deployments.
-3. **AI Provider Guardrails:** The Gemini AI copilot is strictly advisory. It receives only pre-computed metrics and sanitized text. All cited transaction IDs are validated in Python against the active session before display; hallucinated IDs are stripped. Without an API key, the system runs in high-fidelity deterministic offline mode.
-4. **Unsupported Statement Formats:** Password-protected PDFs, scanned image PDFs without selectable text layers, and non-standard multi-currency ledgers without clear debit/credit delimiters are currently unsupported and will return controlled parse error messages.
-5. **Regulatory Disclaimer:** ArthaShield is an educational decision-support copilot designed for hackathons and consumer awareness. It does not provide certified financial advice, credit underwriting, or formal DPDP/GDPR compliance certification.
