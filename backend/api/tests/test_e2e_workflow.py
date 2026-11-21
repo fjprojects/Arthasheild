@@ -151,7 +151,14 @@ class EndToEndWorkflowIntegrationTests(TestCase):
         self.assertEqual(resp_dup.status_code, 200)
         self.assertEqual(resp_dup.data["persistence"]["imported"], 0)
         self.assertEqual(resp_dup.data["persistence"]["skipped_duplicates"], 4)
-        self.assertEqual(Transaction.objects.filter(session_id=self.session_id).count(), 4)
+        self.assertEqual(
+            Transaction.objects.filter(
+                session_id=self.session_id, source_type=Transaction.SOURCE_IMPORT
+            ).count(),
+            4,
+        )
+        # The fifth row is the separate persona fixture added above.
+        self.assertEqual(Transaction.objects.filter(session_id=self.session_id).count(), 5)
 
         # 7. Run all five Financial Intelligence functions via API endpoints
         # 7.1 Categorize
