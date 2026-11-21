@@ -897,8 +897,7 @@ export default function App() {
                 <div className="view-enter">
                   <PrivacyInspector
                     sessionId={sessionId}
-                    includePersona={includePersona}
-                    datasetSourceLabel={activeDatasetLabel}
+                    hasConsented={hasConsented}
                     onImportSuccess={async (data) => {
                       showToast(`Imported ${data.persistence?.imported || data.transactions?.length || 0} transactions!`);
                       if (selectedPersona) handleSelectPersona(selectedPersona.id, sessionId);
