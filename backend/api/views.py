@@ -1377,10 +1377,14 @@ class NukeDataView(APIView):
             return err
         session_id = auth_session.session_id
 
-        deleted_tx, _ = Transaction.objects.filter(session_id=session_id).delete()
-        deleted_snap, _ = FinancialSnapshot.objects.filter(session_id=session_id).delete()
-        deleted_scen, _ = DecisionScenario.objects.filter(session_id=session_id).delete()
-        deleted_cons, _ = ConsentAuditLog.objects.filter(session_id=session_id).delete()
+        # Keep the hard purge all-or-nothing. If any table deletion fails,
+        # the database rolls back the earlier deletes instead of leaving a
+        # partially shredded session.
+        with db_transaction.atomic():
+            deleted_tx, _ = Transaction.objects.filter(session_id=session_id).delete()
+            deleted_snap, _ = FinancialSnapshot.objects.filter(session_id=session_id).delete()
+            deleted_scen, _ = DecisionScenario.objects.filter(session_id=session_id).delete()
+            deleted_cons, _ = ConsentAuditLog.objects.filter(session_id=session_id).delete()
 
         return Response(
             {

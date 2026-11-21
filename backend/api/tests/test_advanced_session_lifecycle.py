@@ -16,6 +16,7 @@ Covers Section C of Additional ArthaShield Audit:
 from datetime import timedelta
 from decimal import Decimal
 import uuid
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -255,7 +256,44 @@ class AdvancedSessionLifecycleTests(TestCase):
         self.assertEqual(Transaction.objects.filter(session_id=session_id).count(), 0)
         self.assertEqual(ConsentAuditLog.objects.filter(session_id=session_id).count(), 0)
 
-    # 8. Stale write guard: Cross-session mismatch rejected
+    def test_08_atomic_data_shredder_rolls_back_on_late_delete_failure(self):
+        created = self.client_a.post(INIT_URL)
+        session_id = created.data["session_id"]
+        token = created.data["session_token"]
+
+        snapshot = FinancialSnapshot.objects.create(
+            session_id=session_id,
+            liquid_balance=Decimal("45000.00"),
+        )
+        transaction = Transaction.objects.create(
+            snapshot=snapshot,
+            session_id=session_id,
+            transaction_date=timezone.now().date(),
+            amount=Decimal("1200.00"),
+            transaction_type="DEBIT",
+            normalized_merchant="Gym Membership",
+            source_type="import",
+        )
+        consent = ConsentAuditLog.objects.create(
+            session_id=session_id,
+            is_active=True,
+        )
+
+        # Fail at the final table deletion, after the earlier delete calls have
+        # executed. The transaction wrapper must restore every earlier record.
+        with patch("api.views.ConsentAuditLog.objects.filter") as consent_filter:
+            consent_filter.side_effect = RuntimeError("simulated database failure")
+            with self.assertRaises(RuntimeError):
+                self.client_a.post(
+                    NUKE_DATA_URL,
+                    HTTP_X_SESSION_TOKEN=token,
+                )
+
+        self.assertTrue(FinancialSnapshot.objects.filter(pk=snapshot.pk).exists())
+        self.assertTrue(Transaction.objects.filter(pk=transaction.pk).exists())
+        self.assertTrue(ConsentAuditLog.objects.filter(pk=consent.pk).exists())
+
+    # 9. Stale write guard: Cross-session mismatch rejected
     def test_08_cross_session_substitution_rejected(self):
         resp_a = self.client_a.post(INIT_URL)
         token_a = resp_a.data["session_token"]
