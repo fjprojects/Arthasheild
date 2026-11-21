@@ -11,7 +11,7 @@
 
 [![Hackathon](https://img.shields.io/badge/Arthaton-2026-emerald.svg)](https://arthaton2026.dev)
 [![Architecture](https://img.shields.io/badge/Architecture-Tokenized%20PII%20%2B%20Deterministic%20Math-blue.svg)]()
-[![Stack](https://img.shields.io/badge/Stack-React%20%7C%20Django%20%7C%20Postgres-indigo.svg)]()
+[![Stack](https://img.shields.io/badge/Stack-React%20%7C%20Django%20%7C%20Python-indigo.svg)]()
 
 > **Mission:** let an ordinary person understand a bank statement, see where the money actually goes, and test a "no-cost" EMI offer — **without handing over bank credentials, UPI PINs, or raw personal identifiers.**
 
@@ -157,7 +157,7 @@ Provides up to three actionable deterministic alternatives:
    │                                  api/response_safety.py
    └── Optional advisor layer         receives ONLY sanitized text and
                                       pre-computed metrics; schema-validated
-[Database]  PostgreSQL in production, SQLite locally, one row set per session
+[Database]  SQLite fallback; PostgreSQL when DATABASE_URL and a PostgreSQL driver are configured
 ```
 
 **What is stored:** sanitized merchant labels, amounts, dates, directions and a per-session snapshot. Raw narration is not persisted. A session can be purged completely with one click.
@@ -513,7 +513,7 @@ boundary and the session/consent rules rather than the shape of the UI.
 
 ---
 
-## 10. Engineering Limitations & Boundary Disclosures
+## 13. Engineering Limitations & Boundary Disclosures
 
 In accordance with responsible fintech engineering principles:
 
