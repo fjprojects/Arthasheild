@@ -221,6 +221,27 @@ class AdvisorTransportContractTests(AdvisorTestBase):
         self.assertEqual(AdvisorService.DEFAULT_MODEL, "gemini-3.8-flash")
         self.assertNotIn("2.5-flash", AdvisorService.DEFAULT_MODEL)
         self.assertNotIn("2.0-flash", AdvisorService.DEFAULT_MODEL)
+    
+    def test_11_statement_request_sends_constrained_json_schema(self):
+        with patch.object(AdvisorService, "get_api_key", return_value="synthetic_test_key"):
+            with patch("requests.post") as mock_post:
+                mock_post.return_value.status_code = 200
+                mock_post.return_value.json.return_value = provider_answer(
+                    json.dumps(VALID_MODEL_ANSWER)
+                )
+                result = AdvisorService.analyze_sanitized_statement(
+                    "sanitized", {"monthly_income": 75000.0}
+                )
+                self.assertEqual(result["source"], "LIVE_GEMINI")
+                request_body = mock_post.call_args[1]["json"]
+                generation_config = request_body["generationConfig"]
+                self.assertEqual(
+                    generation_config["responseJsonSchema"],
+                    AdvisorService.STATEMENT_RESPONSE_SCHEMA,
+                )
+                self.assertEqual(
+                    generation_config["responseMimeType"], "application/json"
+                )
 
     def test_09_without_a_key_no_request_is_made_at_all(self):
         with patch.object(AdvisorService, "get_api_key", return_value=None):
