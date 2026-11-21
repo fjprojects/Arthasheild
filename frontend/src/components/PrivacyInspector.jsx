@@ -81,6 +81,7 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, ha
     }
     setIsSanitizing(true);
     setSanitizeError(null);
+    setAnalysisError(null);
     setSanitizeSuccessMessage(null);
     try {
       const data = await api.sanitizePreview(rawText, selectedFile);
