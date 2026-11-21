@@ -238,7 +238,6 @@ if IS_PRODUCTION:
     CORS_ALLOW_ALL_ORIGINS = False
 
     allowed_origins = [
-        "https://arthashield.vercel.app",
         "https://arthasheild.vercel.app",
     ]
 
