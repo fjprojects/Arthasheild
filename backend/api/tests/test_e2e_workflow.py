@@ -1,10 +1,12 @@
 import uuid
 from decimal import Decimal
 from datetime import date
+from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.test import APIClient, APIRequestFactory
 
 from api.models import ConsentAuditLog, FinancialSnapshot, Transaction, SecureSession
+from advisor.services import AdvisorService
 from api.views import (
     ParseStatementView,
     DocumentAnalyzeView,
@@ -100,6 +102,38 @@ class EndToEndWorkflowIntegrationTests(TestCase):
         self.assertIn("persistence", resp_persist.data)
         self.assertEqual(resp_persist.data["persistence"]["imported"], 4)
         self.assertEqual(Transaction.objects.filter(session_id=self.session_id, source_type='import').count(), 4)
+
+        # 4.1 Add a distinct persona row to prove statement analysis cannot mix datasets.
+        Transaction.objects.create(
+            session_id=self.session_id,
+            transaction_date=date(2026, 10, 2),
+            amount=Decimal("99999.00"),
+            transaction_type="CREDIT",
+            normalized_merchant="DEMO PERSONA ONLY",
+            category="Salary",
+            source_type=Transaction.SOURCE_PERSONA,
+        )
+
+        # 4.2 Run the real analysis endpoint against the saved imported ledger.
+        # Provider transport is intentionally offline here; this validates the
+        # end-to-end dataset boundary and deterministic fallback contract.
+        with patch.object(AdvisorService, "get_api_key", return_value=None):
+            resp_analysis = self.client.post(
+                "/api/v1/documents/analyze/",
+                {
+                    "session_id": self.session_id,
+                    "sanitized_text": "Synthetic imported statement preview",
+                    "include_persona": False,
+                },
+                format="json",
+            )
+        self.assertEqual(resp_analysis.status_code, 200)
+        self.assertEqual(
+            resp_analysis.data["metrics"]["data_source"], "IMPORTED_STATEMENT"
+        )
+        self.assertEqual(resp_analysis.data["metrics"]["monthly_income"], 75000.0)
+        self.assertNotIn("99999", json.dumps(resp_analysis.data["metrics"]))
+        self.assertFalse(resp_analysis.data["is_ai_generated"])
 
         # 5. Verify PII scrubbing on stored data
         for tx in Transaction.objects.filter(session_id=self.session_id):
