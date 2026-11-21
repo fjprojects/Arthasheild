@@ -108,6 +108,10 @@ class AdvancedAIAdversarialTests(TestCase):
                 prompt_sent = call_args[2]
                 self.assertIn("You are ArthaShield", AdvisorService.STRESS_TEST_SYSTEM_INSTRUCTION)
                 self.assertIn("Evaluate this Commitment Stress Test decision packet", prompt_sent)
+                self.assertEqual(
+                    mock_call.call_args.kwargs["response_schema"],
+                    AdvisorService.STRESS_RESPONSE_SCHEMA,
+                )
 
     # 2. Fabricated transaction IDs are stripped
     def test_02_fabricated_transaction_ids_stripped(self):
@@ -140,6 +144,40 @@ class AdvancedAIAdversarialTests(TestCase):
                 self.assertNotIn(fake_uuid_2, res["evidence_transaction_ids"])
                 self.assertIn(str(self.valid_tx.id), res["evidence_transaction_ids"])
 
+    # 2b. A genuine session ID outside the decision packet is not valid evidence
+    def test_02b_same_session_transaction_outside_packet_is_rejected(self):
+        unrelated_tx = Transaction.objects.create(
+            session_id=self.session_id,
+            transaction_date=date(2026, 10, 2),
+            amount=Decimal("1200.00"),
+            transaction_type="DEBIT",
+            normalized_merchant="Unrelated Grocery Purchase",
+            category="Food",
+            source_type="import",
+        )
+        ai_response = {
+            "explanation": "This decision has a tight cash buffer.",
+            "financial_constraints": ["Emergency runway is below the preferred level"],
+            "evidence_transaction_ids": [str(unrelated_tx.id)],
+            "assumptions": ["Recent income remains consistent"],
+            "scenario_suggestions": ["Compare the wait scenario"],
+        }
+
+        with patch.object(AdvisorService, "get_api_key", return_value="dummy_key"):
+            with patch.object(AdvisorService, "_call_provider") as mock_call:
+                mock_call.return_value = ({
+                    "candidates": [{
+                        "content": {"parts": [{"text": json.dumps(ai_response)}]}
+                    }]
+                }, None)
+                result = AdvisorService.explain_commitment_stress_test(
+                    self.mock_decision_packet,
+                    {str(self.valid_tx.id), str(unrelated_tx.id)},
+                )
+
+        self.assertEqual(result["engine_status"], "OFFLINE_FALLBACK")
+        self.assertEqual(result["evidence_transaction_ids"], [str(self.valid_tx.id)])
+
     # 3. Invented monetary amounts flagged
     def test_03_invented_monetary_amounts_flagged(self):
         # AI hallucinates an arbitrary number (e.g. ₹99,999 or ₹1,23,456) not in packet
@@ -164,9 +202,10 @@ class AdvancedAIAdversarialTests(TestCase):
                     self.mock_decision_packet,
                     {str(self.valid_tx.id)}
                 )
-                # Unverified claims should detect fabricated numbers
-                if res.get("unverified_amount_claims"):
-                    self.assertFalse(res["numeric_claims_verified"])
+                # Unverified rupee claims must prevent a live AI answer from
+                # being shown as trusted financial guidance.
+                self.assertEqual(res["engine_status"], "OFFLINE_FALLBACK")
+                self.assertFalse(res["is_ai_generated"])
 
     # 4. Contradictory AI conclusions do not change authoritative figures
     def test_04_ai_cannot_change_engine_verdict(self):
@@ -191,8 +230,11 @@ class AdvancedAIAdversarialTests(TestCase):
                     self.mock_decision_packet,
                     {str(self.valid_tx.id)}
                 )
-                # AI explanation object does NOT own the authoritative verdict
-                self.assertNotIn("overall_verdict", res)
+                # A contradictory positive affordability claim is rejected;
+                # the deterministic NOT SAFE verdict remains authoritative.
+                self.assertEqual(res["engine_status"], "OFFLINE_FALLBACK")
+                self.assertFalse(res["is_ai_generated"])
+                self.assertNotIn("completely safe", res["explanation"].lower())
                 self.assertEqual(self.mock_decision_packet["overall_verdict"], "NOT SAFE")
 
     # 5. Malformed structured JSON returns fallback

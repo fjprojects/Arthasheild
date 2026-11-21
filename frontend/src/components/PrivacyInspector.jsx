@@ -39,11 +39,12 @@ Date,Description,Debit,Credit,Balance
 2026-10-16,POS OPENAI CHATGPT PLUS MONTHLY US-1182,1650.00,,70185.00
 2026-10-25,UPI/APARTMENT RENT/LANDLORD/9811234567@upi,22000.00,,48185.00`;
 
-export default function PrivacyInspector({ sessionId = null, onImportSuccess, includePersona = false, datasetSourceLabel }) {
+export default function PrivacyInspector({ sessionId = null, onImportSuccess, hasConsented = false }) {
   const [rawText, setRawText] = useState(SAMPLE_RAW_STATEMENT);
   const [sanitizedData, setSanitizedData] = useState(null);
   const [analysisInsights, setAnalysisInsights] = useState(null);
   const [analysisMeta, setAnalysisMeta] = useState(null);
+  const [analysisError, setAnalysisError] = useState(null);
   const [isSanitizing, setIsSanitizing] = useState(false);
   const [sanitizeSuccessMessage, setSanitizeSuccessMessage] = useState(null);
   const [sanitizeError, setSanitizeError] = useState(null);
@@ -57,6 +58,21 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
 
   const sanitizedContainerRef = useRef(null);
 
+  const clearStatementResults = () => {
+    setSanitizedData(null);
+    setAnalysisInsights(null);
+    setAnalysisMeta(null);
+    setAnalysisError(null);
+    setImportResult(null);
+    setImportError(null);
+  };
+
+  const savedImportCount =
+    Number(importResult?.imported || 0) + Number(importResult?.skipped_duplicates || 0);
+  const canRunAnalysis = Boolean(
+    hasConsented && sessionId && sanitizedData && savedImportCount > 0 && !isAnalyzing
+  );
+
   // Trigger live sanitization
   const handleSanitize = async () => {
     if (!rawText.trim() && !selectedFile) {
@@ -65,6 +81,7 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
     }
     setIsSanitizing(true);
     setSanitizeError(null);
+    setAnalysisError(null);
     setSanitizeSuccessMessage(null);
     try {
       const data = await api.sanitizePreview(rawText, selectedFile);
@@ -91,9 +108,14 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
 
   // Trigger persistent parsing with consent
   const handleImportAndSave = async () => {
+    if (!hasConsented) {
+      setImportError('Active processing consent is required before importing financial records.');
+      return;
+    }
     setIsImporting(true);
     setImportResult(null);
     setImportError(null);
+    setAnalysisError(null);
     try {
       const isTxt = selectedFile?.name?.toLowerCase().endsWith('.txt');
       const data = await api.parseStatement({
@@ -104,6 +126,13 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
         persist: true,
       });
       const persistence = data.persistence || { imported: data.transactions?.length || 0, skipped_duplicates: 0 };
+      const savedCount =
+        Number(persistence.imported || 0) + Number(persistence.skipped_duplicates || 0);
+      if (savedCount <= 0) {
+        setImportResult(null);
+        setImportError('No valid transactions were saved. Check the statement format and try again.');
+        return;
+      }
       setImportResult(persistence);
       if (onImportSuccess) onImportSuccess(data);
     } catch (err) {
@@ -121,13 +150,18 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
 
   // Trigger statement analysis (live Gemini if available, or offline rule-based insights)
   const handleRunAnalysis = async () => {
-    if (!sanitizedData) return;
+    if (!canRunAnalysis) return;
     setIsAnalyzing(true);
+    setAnalysisError(null);
     try {
-      // The backend derives every quoted figure from the active dataset only.
-      // Pass that selection through so an imported statement can never be
-      // explained with persona snapshot numbers (or vice versa).
-      const result = await api.analyzeDocument(sanitizedData.sanitized_text_preview, sessionId, includePersona);
+      // This workflow is specifically for a statement that was just persisted
+      // with consent. Never mix its text with the currently selected demo
+      // persona's snapshot or metrics.
+      const result = await api.analyzeDocument(
+        sanitizedData.sanitized_text_preview,
+        sessionId,
+        false
+      );
       setAnalysisInsights(result.advisor_insights);
       const metrics = result.metrics || {};
       setAnalysisMeta({
@@ -137,30 +171,49 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
         geminiAvailable: result.gemini_available || false,
         model: result.advisor_insights?.model || null,
         privacyGuarantee: result.privacy_guarantee,
-        datasetSource: datasetSourceLabel || metrics.data_source || 'UNSPECIFIED',
+        datasetSource: metrics.data_source || 'IMPORTED_STATEMENT',
         datasetStatus: metrics.dataset_status || 'UNSPECIFIED',
         reportingPeriod: metrics.reporting_period?.label || 'PERIOD NOT AVAILABLE',
         runwayStatus: metrics.runway_status || 'NOT PROVIDED',
         metricBasis: metrics.metric_basis || null,
       });
     } catch (err) {
-      console.error(err);
-      alert('Statement analysis failed. Please verify API configuration.');
+      console.error('Statement analysis failed:', err);
+      setAnalysisError(
+        err?.response?.data?.error ||
+        err?.message ||
+        'Statement analysis failed. Check the backend connection and active consent.'
+      );
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setRawText(event.target.result);
-      };
-      reader.readAsText(file);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSelectedFile(file);
+    clearStatementResults();
+
+    const isPdf =
+      file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+      // The backend extracts PDF text. Do not decode PDF bytes as browser text.
+      setRawText('PDF selected. Text extraction will be performed securely by the backend.');
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setRawText(typeof event.target?.result === 'string' ? event.target.result : '');
+    };
+    reader.onerror = () => {
+      setSelectedFile(null);
+      setRawText('');
+      setImportError('Unable to read this file. Try exporting the statement as CSV or TXT.');
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -190,7 +243,7 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
                 <span>Upload Raw File</span>
                 <input 
                   type="file" 
-                  accept=".csv,.txt" 
+                  accept=".csv,.txt,.pdf" 
                   className="hidden" 
                   onChange={handleFileUpload} 
                 />
@@ -202,9 +255,7 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
                 onClick={() => {
                   setSelectedFile(null);
                   setRawText(SAMPLE_RAW_STATEMENT);
-                  setSanitizedData(null);
-                  setAnalysisInsights(null);
-                  setAnalysisMeta(null);
+                  clearStatementResults();
                 }}
                 className="text-[10px] font-mono uppercase tracking-wider px-3 py-2 text-[#AAAAAA] hover:text-white transition cursor-pointer"
               >
@@ -233,7 +284,7 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
             <TargetLock>
               <button
                 onClick={handleImportAndSave}
-                disabled={isImporting || !rawText.trim()}
+                disabled={isImporting || !hasConsented || (!rawText.trim() && !selectedFile)}
                 className="text-[10px] font-mono uppercase tracking-widest px-4 py-2 bg-white hover:bg-[#AAAAAA] text-black font-bold transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-sm"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -258,6 +309,12 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {!hasConsented && (
+        <div className="border border-[#404040] bg-[#0A0A0A] p-3 font-mono text-[10px] text-[#AAAAAA]">
+          Preview scrubbing can be inspected without saving data. Importing and AI analysis require active processing consent.
         </div>
       )}
 
@@ -346,7 +403,11 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
             <div className="relative">
               <textarea
                 value={rawText}
-                onChange={(e) => setRawText(e.target.value)}
+                onChange={(e) => {
+                  setRawText(e.target.value);
+                  setSelectedFile(null);
+                  clearStatementResults();
+                }}
                 rows={16}
                 placeholder="Paste raw bank statement or loan text here..."
                 className="w-full bg-[#050505] border border-[#202020] p-4 font-mono text-xs text-[#AAAAAA] leading-relaxed focus:outline-none focus:border-white resize-none selection:bg-white selection:text-black transition-colors"
@@ -438,6 +499,12 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
         </span>
       </Card>
 
+      {analysisError && (
+        <div className="border border-[#662222] bg-[#140808] p-3 font-mono text-xs text-[#FF8888]">
+          {analysisError}
+        </div>
+      )}
+
       {/* Redactions Audit Strip */}
       {sanitizedData && (
         <Card className="p-4 space-y-3">
@@ -449,14 +516,27 @@ export default function PrivacyInspector({ sessionId = null, onImportSuccess, in
               </span>
             </div>
             
-            <button
+            <div className="flex flex-col items-end gap-1">
+              {!hasConsented ? (
+                <span className="text-[9px] text-[#AAAAAA]">Active consent is required for AI analysis.</span>
+              ) : savedImportCount <= 0 ? (
+                <span className="text-[9px] text-[#AAAAAA]">
+                  Import this scrubbed statement with consent first; preview alone is not the analysis dataset.
+                </span>
+              ) : (
+                <span className="text-[9px] text-[#AAAAAA]">
+                  Analysis uses the saved imported ledger; demo-persona data is excluded.
+                </span>
+              )}
+              <button
               onClick={handleRunAnalysis}
-              disabled={isAnalyzing}
+              disabled={!canRunAnalysis}
               className="text-[10px] font-mono uppercase tracking-widest px-3 py-1.5 bg-white text-black font-bold hover:bg-[#AAAAAA] transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-sm"
             >
               <Sparkles className="w-3 h-3 text-black" />
               <span>{isAnalyzing ? 'Analyzing...' : '3. Run Financial Statement Analysis'}</span>
-            </button>
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2 pt-1">
