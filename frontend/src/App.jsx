@@ -954,7 +954,7 @@ export default function App() {
 
               {activeTab === 'AUDIT_LEDGER' && (
                 <div className="view-enter space-y-4">
-                  {/* Ledger Sub-View Switcher: Transaction Journal vs DPDP Privacy Audit Trail */}
+                  {/* Ledger Sub-View Switcher: Transaction Journal vs Privacy & Consent Audit Trail */}
                   <div className="flex flex-wrap items-center justify-between gap-3 border border-[#202020] bg-black/90 p-3">
                     <div className="flex items-center gap-2">
                       <Layers className="w-3.5 h-3.5 text-white" />
@@ -986,7 +986,7 @@ export default function App() {
                             : 'border-[#333333] bg-black text-[#AAAAAA] hover:text-white hover:border-[#666666]'
                         }`}
                       >
-                        DPDP Privacy Audit Trail
+                        Privacy & Consent Audit Trail
                       </button>
                     </div>
                   </div>
