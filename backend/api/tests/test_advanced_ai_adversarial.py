@@ -140,6 +140,40 @@ class AdvancedAIAdversarialTests(TestCase):
                 self.assertNotIn(fake_uuid_2, res["evidence_transaction_ids"])
                 self.assertIn(str(self.valid_tx.id), res["evidence_transaction_ids"])
 
+    # 2b. A genuine session ID outside the decision packet is not valid evidence
+    def test_02b_same_session_transaction_outside_packet_is_rejected(self):
+        unrelated_tx = Transaction.objects.create(
+            session_id=self.session_id,
+            transaction_date=date(2026, 10, 2),
+            amount=Decimal("1200.00"),
+            transaction_type="DEBIT",
+            normalized_merchant="Unrelated Grocery Purchase",
+            category="Food",
+            source_type="import",
+        )
+        ai_response = {
+            "explanation": "This decision has a tight cash buffer.",
+            "financial_constraints": ["Emergency runway is below the preferred level"],
+            "evidence_transaction_ids": [str(unrelated_tx.id)],
+            "assumptions": ["Recent income remains consistent"],
+            "scenario_suggestions": ["Compare the wait scenario"],
+        }
+
+        with patch.object(AdvisorService, "get_api_key", return_value="dummy_key"):
+            with patch.object(AdvisorService, "_call_provider") as mock_call:
+                mock_call.return_value = ({
+                    "candidates": [{
+                        "content": {"parts": [{"text": json.dumps(ai_response)}]}
+                    }]
+                }, None)
+                result = AdvisorService.explain_commitment_stress_test(
+                    self.mock_decision_packet,
+                    {str(self.valid_tx.id), str(unrelated_tx.id)},
+                )
+
+        self.assertEqual(result["engine_status"], "OFFLINE_FALLBACK")
+        self.assertEqual(result["evidence_transaction_ids"], [str(self.valid_tx.id)])
+
     # 3. Invented monetary amounts flagged
     def test_03_invented_monetary_amounts_flagged(self):
         # AI hallucinates an arbitrary number (e.g. ₹99,999 or ₹1,23,456) not in packet
