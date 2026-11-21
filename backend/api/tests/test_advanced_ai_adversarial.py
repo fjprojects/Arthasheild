@@ -108,6 +108,10 @@ class AdvancedAIAdversarialTests(TestCase):
                 prompt_sent = call_args[2]
                 self.assertIn("You are ArthaShield", AdvisorService.STRESS_TEST_SYSTEM_INSTRUCTION)
                 self.assertIn("Evaluate this Commitment Stress Test decision packet", prompt_sent)
+                self.assertEqual(
+                    mock_call.call_args.kwargs["response_schema"],
+                    AdvisorService.STRESS_RESPONSE_SCHEMA,
+                )
 
     # 2. Fabricated transaction IDs are stripped
     def test_02_fabricated_transaction_ids_stripped(self):
@@ -198,9 +202,10 @@ class AdvancedAIAdversarialTests(TestCase):
                     self.mock_decision_packet,
                     {str(self.valid_tx.id)}
                 )
-                # Unverified claims should detect fabricated numbers
-                if res.get("unverified_amount_claims"):
-                    self.assertFalse(res["numeric_claims_verified"])
+                # Unverified rupee claims must prevent a live AI answer from
+                # being shown as trusted financial guidance.
+                self.assertEqual(res["engine_status"], "OFFLINE_FALLBACK")
+                self.assertFalse(res["is_ai_generated"])
 
     # 4. Contradictory AI conclusions do not change authoritative figures
     def test_04_ai_cannot_change_engine_verdict(self):
@@ -225,8 +230,11 @@ class AdvancedAIAdversarialTests(TestCase):
                     self.mock_decision_packet,
                     {str(self.valid_tx.id)}
                 )
-                # AI explanation object does NOT own the authoritative verdict
-                self.assertNotIn("overall_verdict", res)
+                # A contradictory positive affordability claim is rejected;
+                # the deterministic NOT SAFE verdict remains authoritative.
+                self.assertEqual(res["engine_status"], "OFFLINE_FALLBACK")
+                self.assertFalse(res["is_ai_generated"])
+                self.assertNotIn("completely safe", res["explanation"].lower())
                 self.assertEqual(self.mock_decision_packet["overall_verdict"], "NOT SAFE")
 
     # 5. Malformed structured JSON returns fallback
